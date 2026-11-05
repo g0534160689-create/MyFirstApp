@@ -85,4 +85,4 @@ internal sealed class AppSettings
             return next == '/' || next == ';' || next == '?' || next == '#';
         });
     }
-}}
+}
