@@ -17,6 +17,9 @@ internal sealed class MainForm : Form
         Text = "השירות ייפתח בתוך התוכנה"
     };
     private readonly Button _start = new();
+    private readonly Button _ravKavStart = new();
+    private string _activeStartUrl = "https://hopon.co.il/read";
+    private string _activeServiceName = "HopOn";
     private readonly Button _back = new();
     private CoreWebView2Environment? _webViewEnvironment;
     private bool _browserInitialized;
@@ -26,7 +29,7 @@ internal sealed class MainForm : Form
 
     public MainForm()
     {
-        Text = "עמדת טעינה HopOn";
+        Text = "עמדת טעינה רב-קו";
         RightToLeft = RightToLeft.Yes;
         RightToLeftLayout = true;
         StartPosition = FormStartPosition.CenterScreen;
@@ -70,7 +73,7 @@ internal sealed class MainForm : Form
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
-            RowCount = 7,
+            RowCount = 8,
             Padding = new Padding(24, 10, 24, 12),
             BackColor = _home.BackColor
         };
@@ -79,7 +82,8 @@ internal sealed class MainForm : Form
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 95));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 82));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 76));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 76));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
         var logo = new PictureBox
@@ -139,7 +143,7 @@ internal sealed class MainForm : Form
         steps.Controls.Add(MakeStep("2", "מצמידים את הכרטיס"), 1, 0);
         steps.Controls.Add(MakeStep("3", "בוחרים טעינה ומשלמים"), 2, 0);
 
-        _start.Text = "התחלת טעינה";
+        _start.Text = "טעינה באמצעות HopOn";
         _start.Dock = DockStyle.Fill;
         _start.Margin = new Padding(120, 8, 120, 8);
         _start.FlatStyle = FlatStyle.Flat;
@@ -148,11 +152,22 @@ internal sealed class MainForm : Form
         _start.ForeColor = Color.White;
         _start.Font = new Font("Segoe UI", 21, FontStyle.Bold);
         _start.Cursor = Cursors.Hand;
-        _start.Click += async (_, _) => await OpenOfficialServiceAsync();
+        _start.Click += async (_, _) => await OpenOfficialServiceAsync(_settings.StartUrl, "HopOn");
+
+        _ravKavStart.Text = "טעינה באמצעות רב-קו אונליין";
+        _ravKavStart.Dock = DockStyle.Fill;
+        _ravKavStart.Margin = new Padding(120, 4, 120, 4);
+        _ravKavStart.FlatStyle = FlatStyle.Flat;
+        _ravKavStart.FlatAppearance.BorderSize = 0;
+        _ravKavStart.BackColor = Color.FromArgb(35, 125, 88);
+        _ravKavStart.ForeColor = Color.White;
+        _ravKavStart.Font = new Font("Segoe UI", 18, FontStyle.Bold);
+        _ravKavStart.Cursor = Cursors.Hand;
+        _ravKavStart.Click += async (_, _) => await OpenOfficialServiceAsync(_settings.RavKavStartUrl, "רב-קו אונליין");
 
         var note = new Label
         {
-            Text = "הטעינה מתבצעת בשירות HopOn הרשמי",
+            Text = "הטעינה מתבצעת באתר הרשמי של השירות שנבחר",
             Dock = DockStyle.Fill,
             Font = new Font("Segoe UI", 10),
             ForeColor = Color.FromArgb(105, 119, 133),
@@ -165,7 +180,8 @@ internal sealed class MainForm : Form
         layout.Controls.Add(welcomeText, 0, 3);
         layout.Controls.Add(steps, 0, 4);
         layout.Controls.Add(_start, 0, 5);
-        layout.Controls.Add(note, 0, 6);
+        layout.Controls.Add(_ravKavStart, 0, 6);
+        layout.Controls.Add(note, 0, 7);
         _home.Controls.Add(layout);
     }
 
@@ -187,10 +203,13 @@ internal sealed class MainForm : Form
         return panel;
     }
 
-    private async Task OpenOfficialServiceAsync()
+    private async Task OpenOfficialServiceAsync(string startUrl, string serviceName)
     {
         _start.Enabled = false;
-        _status.Text = "מתחבר לשירות HopOn...";
+        _ravKavStart.Enabled = false;
+        _activeStartUrl = startUrl;
+        _activeServiceName = serviceName;
+        _status.Text = $"מתחבר לשירות {serviceName}...";
         _home.Visible = false;
         _browser.Visible = true;
         _back.Visible = true;
@@ -229,7 +248,8 @@ internal sealed class MainForm : Form
                     CoreWebView2WebResourceRequestSourceKinds.All);
                 core.WebResourceRequested += OnWebResourceRequested;
 
-                await core.AddScriptToExecuteOnDocumentCreatedAsync(BuildRouteGuardScript());
+                await core.AddScriptToExecuteOnDocumentCreatedAsync(BuildRouteGuardScript(_settings.StartUrl));
+                await core.AddScriptToExecuteOnDocumentCreatedAsync(BuildRouteGuardScript(_settings.RavKavStartUrl));
                 core.DownloadStarting += (_, args) => args.Cancel = true;
                 core.LaunchingExternalUriScheme += OnLaunchingExternalUriScheme;
                 core.PermissionRequested += (_, args) => args.State = CoreWebView2PermissionState.Deny;
@@ -240,7 +260,7 @@ internal sealed class MainForm : Form
                         Uri.TryCreate(_browser.CoreWebView2.Source, UriKind.Absolute, out var current) &&
                         _settings.IsAllowedNavigationUri(current) &&
                         !_settings.IsBlockedNavigationUri(current))
-                        _status.Text = "שירות HopOn";
+                        _status.Text = $"שירות {_activeServiceName}";
                 };
                 core.NavigationCompleted += (_, args) =>
                 {
@@ -262,7 +282,7 @@ internal sealed class MainForm : Form
                 _browserInitialized = true;
             }
 
-            if (!Uri.TryCreate(_settings.StartUrl, UriKind.Absolute, out var start) ||
+            if (!Uri.TryCreate(startUrl, UriKind.Absolute, out var start) ||
                 !_settings.IsAllowedNavigationUri(start) ||
                 _settings.IsBlockedNavigationUri(start))
                 throw new InvalidOperationException("כתובת השירות אינה מאושרת בהגדרות.");
@@ -273,7 +293,7 @@ internal sealed class MainForm : Form
         {
             AppDiagnostics.Write("OpenOfficialServiceAsync", ex);
             ShowHome();
-            _status.Text = "לא ניתן לפתוח את שירות HopOn.";
+            _status.Text = $"לא ניתן לפתוח את שירות {serviceName}.";
             MessageBox.Show(
                 this,
                 "פתיחת שירות הטעינה נכשלה.\r\n" +
@@ -286,6 +306,7 @@ internal sealed class MainForm : Form
         finally
         {
             _start.Enabled = true;
+            _ravKavStart.Enabled = true;
         }
     }
 
@@ -297,20 +318,27 @@ internal sealed class MainForm : Form
             _settings.IsBlockedNavigationUri(current))
         {
             _status.Text = "העמוד הזה אינו זמין בעמדת הטעינה.";
-            _browser.CoreWebView2.Navigate(_settings.StartUrl);
+            _browser.CoreWebView2.Navigate(_activeStartUrl);
         }
     }
 
-    private string BuildRouteGuardScript()
+    private string BuildRouteGuardScript(string serviceStartUrl)
     {
-        var origin = new Uri(_settings.StartUrl).GetLeftPart(UriPartial.Authority);
+        var serviceUri = new Uri(serviceStartUrl);
+        var origin = serviceUri.GetLeftPart(UriPartial.Authority);
         var originJson = JsonSerializer.Serialize(origin);
+        var strictPath = _settings.IsRavKavUri(serviceUri);
+        var strictPathJson = JsonSerializer.Serialize(strictPath);
+        var allowedPathJson = JsonSerializer.Serialize(_settings.RavKavAllowedPath);
         var blockedPathsJson = JsonSerializer.Serialize(_settings.BlockedPaths);
 
         var script = """
         (() => {
             "use strict";
+            if (window.top !== window) return;
             const allowedOrigin = __ALLOWED_ORIGIN_JSON__;
+            const strictPath = __STRICT_PATH__;
+            const allowedPath = __ALLOWED_PATH_JSON__;
             const blockedRoots = __BLOCKED_PATHS_JSON__.map(p =>
                 String(p).replace(/\\/g, "/").replace(/\/+$/g, "").toLowerCase()
             );
@@ -347,6 +375,7 @@ internal sealed class MainForm : Form
                 const path = normalizedPath(value);
                 if (path === "__BLOCK_INVALID__") return true;
                 if (path === null) return false;
+                if (strictPath) return path !== allowedPath.toLowerCase();
                 return blockedRoots.some(root =>
                     path === root ||
                     path.startsWith(root + "/") ||
@@ -406,13 +435,15 @@ internal sealed class MainForm : Form
 
         return script
             .Replace("__ALLOWED_ORIGIN_JSON__", originJson, StringComparison.Ordinal)
+            .Replace("__STRICT_PATH__", strictPathJson, StringComparison.Ordinal)
+            .Replace("__ALLOWED_PATH_JSON__", allowedPathJson, StringComparison.Ordinal)
             .Replace("__BLOCKED_PATHS_JSON__", blockedPathsJson, StringComparison.Ordinal);
     }
 
     private void OnFrameNavigationStarting(object? sender, CoreWebView2NavigationStartingEventArgs e)
     {
         if (Uri.TryCreate(e.Uri, UriKind.Absolute, out var target) &&
-            _settings.IsAllowedNavigationUri(target) &&
+            _settings.IsHopOnUri(target) &&
             _settings.IsBlockedNavigationUri(target))
         {
             e.Cancel = true;
