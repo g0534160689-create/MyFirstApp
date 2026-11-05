@@ -28,6 +28,7 @@ https://github.com/g0534160689-create/MyFirstApp/actions
 - `/freeMonthly`
 - `/freeMonthlyOtef`
 - `/accessibility`
+- `/map`
 
 תתי-דומיינים ואתרים אחרים אינם מורשים. חלונות חדשים לאתרים אחרים, הורדות וקישורים חיצוניים חסומים. משאבי האתר (JavaScript, CSS, תמונות וקריאות API) נטענים כרגיל.
 
