@@ -165,7 +165,7 @@ internal sealed class MainForm : Form
             }
 
             if (!Uri.TryCreate(_settings.StartUrl, UriKind.Absolute, out var start) ||
-                start.Scheme != Uri.UriSchemeHttps || !_settings.IsAllowedHttpsHost(start.Host))
+                !_settings.IsAllowedNavigationUri(start))
                 throw new InvalidOperationException("כתובת השירות אינה מאושרת בהגדרות.");
 
             _browser.CoreWebView2.Navigate(start.ToString());
@@ -192,7 +192,7 @@ internal sealed class MainForm : Form
     private void OnNavigationStarting(object? sender, CoreWebView2NavigationStartingEventArgs e)
     {
         if (!Uri.TryCreate(e.Uri, UriKind.Absolute, out var target) ||
-            target.Scheme != Uri.UriSchemeHttps || !_settings.IsAllowedHttpsHost(target.Host))
+            !_settings.IsAllowedNavigationUri(target))
         {
             e.Cancel = true;
             _status.Text = "המעבר נחסם: הכתובת אינה מאושרת.";
@@ -203,7 +203,7 @@ internal sealed class MainForm : Form
     {
         e.Handled = true;
         if (Uri.TryCreate(e.Uri, UriKind.Absolute, out var target) &&
-            target.Scheme == Uri.UriSchemeHttps && _settings.IsAllowedHttpsHost(target.Host))
+            _settings.IsAllowedNavigationUri(target))
             _browser.CoreWebView2.Navigate(target.ToString());
         else
             _status.Text = "חלון חיצוני נחסם.";
