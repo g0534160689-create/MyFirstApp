@@ -14,7 +14,8 @@ internal sealed class AppSettings
         "/freeMonthly",
         "/freeMonthlyOtef",
         "/accessibility",
-        "/map"
+        "/map",
+        "/student"
     ];
 
     public static AppSettings Load()
