@@ -233,11 +233,11 @@ internal sealed class MainForm : Form
         var originJson = JsonSerializer.Serialize(origin);
         var blockedPathsJson = JsonSerializer.Serialize(_settings.BlockedPaths);
 
-        return $"""
+        var script = """
         (() => {
             "use strict";
-            const allowedOrigin = {{originJson}};
-            const blockedRoots = {{blockedPathsJson}}.map(p =>
+            const allowedOrigin = __ALLOWED_ORIGIN_JSON__;
+            const blockedRoots = __BLOCKED_PATHS_JSON__.map(p =>
                 String(p).replace(/\\/g, "/").replace(/\/+$/g, "").toLowerCase()
             );
 
@@ -328,6 +328,10 @@ internal sealed class MainForm : Form
             }, true);
         })();
         """;
+
+        return script
+            .Replace("__ALLOWED_ORIGIN_JSON__", originJson, StringComparison.Ordinal)
+            .Replace("__BLOCKED_PATHS_JSON__", blockedPathsJson, StringComparison.Ordinal);
     }
 
     private void OnFrameNavigationStarting(object? sender, CoreWebView2NavigationStartingEventArgs e)
