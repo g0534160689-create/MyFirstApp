@@ -12,7 +12,7 @@ internal sealed class MainForm : Form
     {
         AutoSize = false, Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleCenter,
         Font = new Font("Segoe UI", 9), ForeColor = Color.FromArgb(91, 107, 123),
-        Text = "השירות הרשמי ייפתח בתוך התוכנה"
+        Text = "השירות ייפתח בתוך התוכנה"
     };
     private readonly Button _start = new();
     private readonly Button _back = new();
@@ -23,7 +23,7 @@ internal sealed class MainForm : Form
 
     public MainForm()
     {
-        Text = "עמדת טעינת רב־קו";
+        Text = "עמדת טעינה HopOn";
         RightToLeft = RightToLeft.Yes;
         RightToLeftLayout = true;
         StartPosition = FormStartPosition.CenterScreen;
@@ -88,9 +88,9 @@ internal sealed class MainForm : Form
         };
         var steps = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 1, BackColor = Color.Transparent };
         for (var i = 0; i < 3; i++) steps.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.333f));
-        steps.Controls.Add(MakeStep("1", "מחברים קורא USB", 0), 0, 0);
-        steps.Controls.Add(MakeStep("2", "מצמידים את הכרטיס", 1), 1, 0);
-        steps.Controls.Add(MakeStep("3", "בוחרים טעינה ומשלמים", 2), 2, 0);
+        steps.Controls.Add(MakeStep("1", "מחברים קורא USB"), 0, 0);
+        steps.Controls.Add(MakeStep("2", "מצמידים את הכרטיס"), 1, 0);
+        steps.Controls.Add(MakeStep("3", "בוחרים טעינה ומשלמים"), 2, 0);
 
         _start.Text = "התחלת טעינה";
         _start.Dock = DockStyle.Fill;
@@ -118,7 +118,7 @@ internal sealed class MainForm : Form
         _home.Controls.Add(layout);
     }
 
-    private static Control MakeStep(string number, string caption, int index)
+    private static Control MakeStep(string number, string caption)
     {
         var panel = new Panel { Dock = DockStyle.Fill, Margin = new Padding(10), BackColor = Color.White, Padding = new Padding(12) };
         var numberLabel = new Label
@@ -139,7 +139,7 @@ internal sealed class MainForm : Form
     private async Task OpenOfficialServiceAsync()
     {
         _start.Enabled = false;
-        _status.Text = "מתחבר לשירות הרשמי...";
+        _status.Text = "מתחבר לשירות HopOn...";
         _home.Visible = false;
         _browser.Visible = true;
         _back.Visible = true;
@@ -155,13 +155,13 @@ internal sealed class MainForm : Form
                 core.Settings.IsZoomControlEnabled = false;
                 core.Settings.AreBrowserAcceleratorKeysEnabled = false;
                 core.NavigationStarting += OnNavigationStarting;
-                core.HistoryChanged += (_, _) => { if (Uri.TryCreate(core.Source, UriKind.Absolute, out var current) && !_settings.IsAllowedNavigationUri(current)) core.Navigate(_settings.StartUrl); };\n                await core.AddScriptToExecuteOnDocumentCreatedAsync(@"(() => {\n  const allowed = (value) => { try { const u = new URL(value, location.href); let p = u.pathname; while (p.includes(\"%\")) { const d = decodeURIComponent(p); if (d === p) break; p = d; } return u.protocol === \"https:\" && u.hostname.toLowerCase() === \"hopon.co.il\" && (p === \"/read\" || p === \"/read/\"); } catch { return false; } };\n  document.addEventListener(\"click\", e => { const a = e.target && e.target.closest ? e.target.closest(\"a[href]\") : null; if (a && !allowed(a.href)) { e.preventDefault(); e.stopImmediatePropagation(); } }, true);\n  for (const method of [\"pushState\", \"replaceState\"]) { const original = history[method].bind(history); history[method] = function(state, title, url) { if (url != null && !allowed(url)) return; return original(state, title, url); }; }\n  addEventListener(\"popstate\", () => { if (!allowed(location.href)) location.replace(\"https://hopon.co.il/read\"); }, true);\n})();");
+                core.HistoryChanged += (_, _) => EnforceCurrentPage();
                 core.NewWindowRequested += OnNewWindowRequested;
                 core.DownloadStarting += (_, args) => args.Cancel = true;
                 core.LaunchingExternalUriScheme += OnLaunchingExternalUriScheme;
                 core.PermissionRequested += (_, args) => args.State = CoreWebView2PermissionState.Deny;
-                core.SourceChanged += (_, _) => _status.Text = "שירות רב־קו אונליין";
-                core.ProcessFailed += (_, _) => _status.Text = "אירעה תקלה ברכיב הדפדפן. חזור ונסה שוב.";
+                core.SourceChanged += (_, _) => _status.Text = "שירות HopOn";
+                core.ProcessFailed += (_, _) => _status.Text = "אירעה תקלה. חזור ונסה שוב.";
                 _browserInitialized = true;
             }
 
@@ -182,6 +182,17 @@ internal sealed class MainForm : Form
         }
     }
 
+    private void EnforceCurrentPage()
+    {
+        if (_browser.CoreWebView2 is null) return;
+        if (!Uri.TryCreate(_browser.CoreWebView2.Source, UriKind.Absolute, out var current) ||
+            !_settings.IsAllowedNavigationUri(current))
+        {
+            _status.Text = "העמוד נחסם. ניתן להשתמש בעמוד הטעינה בלבד.";
+            _browser.CoreWebView2.Navigate(_settings.StartUrl);
+        }
+    }
+
     private void ShowHome()
     {
         _browser.Visible = false;
@@ -196,7 +207,7 @@ internal sealed class MainForm : Form
             !_settings.IsAllowedNavigationUri(target))
         {
             e.Cancel = true;
-            _status.Text = "המעבר נחסם: הכתובת אינה מאושרת.";
+            _status.Text = "המעבר נחסם: ניתן להשתמש בעמוד הטעינה בלבד.";
         }
     }
 
@@ -212,11 +223,7 @@ internal sealed class MainForm : Form
 
     private void OnLaunchingExternalUriScheme(object? sender, CoreWebView2LaunchingExternalUriSchemeEventArgs e)
     {
-        if (!Uri.TryCreate(e.Uri, UriKind.Absolute, out var target) ||
-            true)
-        {
-            e.Cancel = true;
-            _status.Text = "הפעלת רכיב חיצוני נחסמה עד לאימות פרוטוקול קורא הכרטיסים.";
-        }
+        e.Cancel = true;
+        _status.Text = "קישור חיצוני אינו מורשה בעמדה זו.";
     }
 }
