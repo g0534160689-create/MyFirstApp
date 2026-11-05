@@ -212,7 +212,7 @@ internal sealed class MainForm : Form
     private void OnLaunchingExternalUriScheme(object? sender, CoreWebView2LaunchingExternalUriSchemeEventArgs e)
     {
         if (!Uri.TryCreate(e.Uri, UriKind.Absolute, out var target) ||
-            !_settings.IsAllowedExternalScheme(target.Scheme))
+            true)
         {
             e.Cancel = true;
             _status.Text = "הפעלת רכיב חיצוני נחסמה עד לאימות פרוטוקול קורא הכרטיסים.";
