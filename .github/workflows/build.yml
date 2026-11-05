@@ -7,6 +7,9 @@ on:
     branches: [ main ]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: windows-latest
@@ -22,10 +25,19 @@ jobs:
       - name: Publish Windows x64 app
         run: dotnet publish RavKavKiosk/RavKavKiosk.csproj --configuration Release --runtime win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish
 
-      - name: Upload ready-to-run package
+      - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
           name: RavKavKiosk-win-x64
           path: publish/
           if-no-files-found: error
           retention-days: 30
+
+      - name: Publish EXE to GitHub Releases
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "v1.0.${{ github.run_number }}"
+          gh release create $tag "publish/RavKavKiosk.exe" --title "RavKavKiosk $tag" --notes "Windows x64 self-contained build. WebView2 Runtime is required on the target PC."
