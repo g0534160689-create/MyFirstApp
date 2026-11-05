@@ -6,6 +6,10 @@ internal sealed class AppSettings
 {
     public string StartUrl { get; set; } = "https://hopon.co.il/read";
     public string AllowedHost { get; set; } = "hopon.co.il";
+    public string RavKavStartUrl { get; set; } = "https://ravkavonline.co.il/he/store/connect";
+    public string RavKavHost { get; set; } = "ravkavonline.co.il";
+    public string RavKavAllowedPath { get; set; } = "/he/store/connect";
+
     public List<string> BlockedPaths { get; set; } =
     [
         "/charging-stations-map",
@@ -30,25 +34,67 @@ internal sealed class AppSettings
         catch { return new AppSettings(); }
     }
 
-    // Allow normal navigation anywhere on the official HopOn host.
+    // Both official services may be opened in the embedded browser. HopOn permits
+    // its normal internal flow; Rav-Kav Online permits only its connect entry route.
     public bool IsAllowedNavigationUri(Uri uri)
     {
-        return uri.IsAbsoluteUri &&
-               uri.Scheme == Uri.UriSchemeHttps &&
-               uri.Host.Equals(AllowedHost, StringComparison.OrdinalIgnoreCase) &&
-               uri.IsDefaultPort &&
-               string.IsNullOrEmpty(uri.UserInfo);
+        if (!IsSecureHttpUri(uri)) return false;
+
+        return uri.Host.Equals(AllowedHost, StringComparison.OrdinalIgnoreCase) ||
+               uri.Host.Equals(RavKavHost, StringComparison.OrdinalIgnoreCase);
     }
 
-    // Block the exact route and any nested/encoded variant of that route.
+    public bool IsHopOnUri(Uri uri) =>
+        uri.IsAbsoluteUri &&
+        uri.Host.Equals(AllowedHost, StringComparison.OrdinalIgnoreCase);
+
+    public bool IsRavKavUri(Uri uri) =>
+        uri.IsAbsoluteUri &&
+        uri.Host.Equals(RavKavHost, StringComparison.OrdinalIgnoreCase);
+
+    // For Rav-Kav Online, only /he/store/connect is a permitted top-level route.
+    // For HopOn, retain the existing blocked-route list and its nested/encoded checks.
     public bool IsBlockedNavigationUri(Uri uri)
     {
-        if (!uri.IsAbsoluteUri) return true;
+        if (!IsSecureHttpUri(uri)) return true;
 
-        var path = uri.AbsolutePath;
+        if (IsRavKavUri(uri))
+        {
+            var path = NormalizePath(uri.AbsolutePath);
+            return path is null ||
+                   !path.Equals(NormalizePath(RavKavAllowedPath), StringComparison.OrdinalIgnoreCase);
+        }
+
+        if (!IsHopOnUri(uri)) return true;
+
+        var normalizedPath = NormalizePath(uri.AbsolutePath);
+        if (normalizedPath is null) return true;
+
+        return (BlockedPaths ?? []).Any(blocked =>
+        {
+            var root = NormalizePath(blocked);
+            if (string.IsNullOrEmpty(root) || root == "/") return false;
+            if (!normalizedPath.StartsWith(root, StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            if (normalizedPath.Length == root.Length) return true;
+            var next = normalizedPath[root.Length];
+            return next == '/' || next == ';' || next == '?' || next == '#';
+        });
+    }
+
+    private static bool IsSecureHttpUri(Uri uri) =>
+        uri.IsAbsoluteUri &&
+        uri.Scheme == Uri.UriSchemeHttps &&
+        uri.IsDefaultPort &&
+        string.IsNullOrEmpty(uri.UserInfo);
+
+    private static string? NormalizePath(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        var path = value;
         try
         {
-            // Repeated decoding catches ordinary and double-encoded path tricks.
             for (var i = 0; i < 10 && path.Contains('%'); i++)
             {
                 var decoded = Uri.UnescapeDataString(path);
@@ -56,11 +102,9 @@ internal sealed class AppSettings
                 path = decoded;
             }
         }
-        catch { return true; }
+        catch { return null; }
 
-        // Fail closed if a suspiciously encoded path remains after repeated decoding.
-        if (path.Contains('%')) return true;
-
+        if (path.Contains('%')) return null;
         path = path.Replace('\\', '/');
         var segments = new List<string>();
         foreach (var segment in path.Split('/'))
@@ -73,17 +117,6 @@ internal sealed class AppSettings
             }
             segments.Add(segment);
         }
-
-        var normalizedPath = "/" + string.Join("/", segments);
-        return (BlockedPaths ?? []).Any(blocked =>
-        {
-            var root = blocked.TrimEnd('/');
-            if (!normalizedPath.StartsWith(root, StringComparison.OrdinalIgnoreCase))
-                return false;
-
-            if (normalizedPath.Length == root.Length) return true;
-            var next = normalizedPath[root.Length];
-            return next == '/' || next == ';' || next == '?' || next == '#';
-        });
+        return "/" + string.Join("/", segments);
     }
 }
