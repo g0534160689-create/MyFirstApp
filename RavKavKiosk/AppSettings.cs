@@ -9,6 +9,13 @@ internal sealed class AppSettings
     public string RavKavStartUrl { get; set; } = "https://ravkavonline.co.il/he/store/connect";
     public string RavKavHost { get; set; } = "ravkavonline.co.il";
     public string RavKavAllowedPath { get; set; } = "/he/store/connect";
+    public List<string> PortalAllowedHosts { get; set; } =
+    [
+        "www.matara.pro",
+        "matara.pro",
+        "rishumon.net",
+        "tora.irom.co.il"
+    ];
 
     public List<string> BlockedPaths { get; set; } =
     [
@@ -41,7 +48,9 @@ internal sealed class AppSettings
         if (!IsSecureHttpUri(uri)) return false;
 
         return uri.Host.Equals(AllowedHost, StringComparison.OrdinalIgnoreCase) ||
-               uri.Host.Equals(RavKavHost, StringComparison.OrdinalIgnoreCase);
+               uri.Host.Equals(RavKavHost, StringComparison.OrdinalIgnoreCase) ||
+               (PortalAllowedHosts ?? []).Any(host =>
+                   uri.Host.Equals(host, StringComparison.OrdinalIgnoreCase));
     }
 
     public bool IsHopOnUri(Uri uri) =>
