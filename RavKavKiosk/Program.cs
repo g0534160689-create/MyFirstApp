@@ -147,6 +147,17 @@ internal sealed class WebViewSmokeTestForm : Form
                     throw new InvalidOperationException("Case-variant blocked route is not blocked: " + upperUri);
             }
 
+            foreach (var host in settings.PortalAllowedHosts)
+            {
+                var portalUri = new Uri("https://" + host + "/");
+                if (!settings.IsAllowedNavigationUri(portalUri) || settings.IsBlockedNavigationUri(portalUri))
+                    throw new InvalidOperationException("Configured portal host is not allowed: " + host);
+            }
+
+            var unknownHost = new Uri("https://not-approved.example/");
+            if (settings.IsAllowedNavigationUri(unknownHost))
+                throw new InvalidOperationException("An unlisted external host must not be allowed.");
+
             if (!Uri.TryCreate(settings.RavKavStartUrl, UriKind.Absolute, out var ravKavStart) ||
                 !settings.IsAllowedNavigationUri(ravKavStart) ||
                 settings.IsBlockedNavigationUri(ravKavStart))
