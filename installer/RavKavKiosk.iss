@@ -1,4 +1,4 @@
-#define MyAppName "RavKavKiosk"
+#define MyAppName "עמדת טעינה HopOn"
 #define MyAppVersion "1.1.0"
 #define MyAppPublisher "RavKavKiosk"
 #define MyAppExeName "RavKavKiosk.exe"
@@ -45,11 +45,19 @@ var
 begin
   if CurStep = ssPostInstall then
   begin
-    RuntimeInstaller := ExpandConstant('{tmp}\MicrosoftEdgeWebView2RuntimeInstallerX64.exe');
+    RuntimeInstaller := ExpandConstant('{tmp}\\MicrosoftEdgeWebView2RuntimeInstallerX64.exe');
     ExtractTemporaryFile('MicrosoftEdgeWebView2RuntimeInstallerX64.exe');
+
     if not Exec(RuntimeInstaller, '/silent /install', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
-      MsgBox('לא ניתן להפעיל את מתקין רכיב הדפדפן WebView2. אפשר להתקין אותו מאוחר יותר מאתר Microsoft.', mbInformation, MB_OK)
-    else if (ResultCode <> 0) and (ResultCode <> 3010) then
-      MsgBox('התקנת רכיב WebView2 לא הושלמה (קוד ' + IntToStr(ResultCode) + '). יש להפעיל את המתקין שוב או להתקין את WebView2 מאתר Microsoft.', mbInformation, MB_OK);
+    begin
+      MsgBox('התקנת רכיב WebView2 נכשלה. ההתקנה תיעצר כדי שלא תישאר תוכנה שאינה יכולה לפעול.', mbCriticalError, MB_OK);
+      Abort;
+    end;
+
+    if (ResultCode <> 0) and (ResultCode <> 3010) then
+    begin
+      MsgBox('התקנת רכיב WebView2 נכשלה (קוד ' + IntToStr(ResultCode) + '). ההתקנה תיעצר.', mbCriticalError, MB_OK);
+      Abort;
+    end;
   end;
 end;

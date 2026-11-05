@@ -242,7 +242,23 @@ internal sealed class MainForm : Form
                         !_settings.IsBlockedNavigationUri(current))
                         _status.Text = "שירות HopOn";
                 };
-                core.ProcessFailed += (_, _) => _status.Text = "אירעה תקלה. חזור ונסה שוב.";
+                core.NavigationCompleted += (_, args) =>
+                {
+                    if (!args.IsSuccess)
+                    {
+                        var error = new InvalidOperationException(
+                            $"טעינת HopOn נכשלה: {args.WebErrorStatus}");
+                        AppDiagnostics.Write("NavigationCompleted", error);
+                        _status.Text = $"הטעינה נכשלה: {args.WebErrorStatus}";
+                    }
+                };
+                core.ProcessFailed += (_, args) =>
+                {
+                    var error = new InvalidOperationException(
+                        $"WebView2 process failed: {args.ProcessFailedKind}");
+                    AppDiagnostics.Write("WebView2 ProcessFailed", error);
+                    _status.Text = "רכיב הדפדפן הפסיק לפעול. חזור ונסה שוב.";
+                };
                 _browserInitialized = true;
             }
 
@@ -255,8 +271,17 @@ internal sealed class MainForm : Form
         }
         catch (Exception ex)
         {
-            _status.Text = "לא ניתן לפתוח את השירות: " + ex.Message;
+            AppDiagnostics.Write("OpenOfficialServiceAsync", ex);
             ShowHome();
+            _status.Text = "לא ניתן לפתוח את שירות HopOn.";
+            MessageBox.Show(
+                this,
+                "פתיחת שירות הטעינה נכשלה.\r\n" +
+                ex.Message + "\r\n\r\n" +
+                "פרטי התקלה נשמרו בקובץ:\r\n" + AppDiagnostics.LogFilePath,
+                "שגיאה בהפעלת עמדת הטעינה",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error);
         }
         finally
         {
