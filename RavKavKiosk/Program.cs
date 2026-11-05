@@ -147,6 +147,31 @@ internal sealed class WebViewSmokeTestForm : Form
                     throw new InvalidOperationException("Case-variant blocked route is not blocked: " + upperUri);
             }
 
+            if (!Uri.TryCreate(settings.RavKavStartUrl, UriKind.Absolute, out var ravKavStart) ||
+                !settings.IsAllowedNavigationUri(ravKavStart) ||
+                settings.IsBlockedNavigationUri(ravKavStart))
+                throw new InvalidOperationException("The configured Rav-Kav Online connect route is not allowed.");
+
+            var ravKavBlockedPaths = new[]
+            {
+                "/",
+                "/he",
+                "/he/store",
+                "/he/store/other",
+                "/he/store/connect/other",
+                "/he/store/connect%252fother"
+            };
+            foreach (var path in ravKavBlockedPaths)
+            {
+                var blockedUri = new Uri("https://ravkavonline.co.il" + path);
+                if (!settings.IsBlockedNavigationUri(blockedUri))
+                    throw new InvalidOperationException("Rav-Kav Online route must be blocked: " + blockedUri);
+            }
+
+            var ravKavQueryUri = new Uri("https://ravkavonline.co.il/he/store/connect?source=kiosk");
+            if (settings.IsBlockedNavigationUri(ravKavQueryUri))
+                throw new InvalidOperationException("Query strings on the allowed connect route must remain available.");
+
             Directory.CreateDirectory(_userDataFolder);
             var environment = await CoreWebView2Environment.CreateAsync(
                 browserExecutableFolder: null,
@@ -155,7 +180,7 @@ internal sealed class WebViewSmokeTestForm : Form
 
             AppDiagnostics.Write(
                 "Smoke test",
-                details: "PASS: appsettings loaded; StartUrl allowed; all blocked routes and nested routes denied; WebView2 runtime initialized.");
+                details: "PASS: HopOn and Rav-Kav Online entry routes validated; blocked routes denied; WebView2 runtime initialized.");
             ExitCode = 0;
         }
         catch (Exception ex)
