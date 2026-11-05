@@ -27,7 +27,6 @@ internal sealed class AppSettings
             !uri.IsDefaultPort || !string.IsNullOrEmpty(uri.UserInfo))
             return false;
 
-        // Allow only the card-reading/charging page. Any other path on this host is denied.
         var path = uri.AbsolutePath;
         try
         {
