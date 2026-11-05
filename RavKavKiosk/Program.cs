@@ -110,6 +110,10 @@ internal sealed class WebViewSmokeTestForm : Form
     {
         try
         {
+            // Construct the actual app form too: this validates startup UI resources,
+            // including the embedded yeshiva logo, without opening a visible kiosk window.
+            using var mainWindow = new MainForm();
+
             var settings = AppSettings.Load();
             if (!Uri.TryCreate(settings.StartUrl, UriKind.Absolute, out var start) ||
                 !settings.IsAllowedNavigationUri(start) ||
@@ -125,6 +129,14 @@ internal sealed class WebViewSmokeTestForm : Form
                 var nestedUri = new Uri("https://hopon.co.il" + blockedPath.TrimEnd('/') + "/smoke-test");
                 if (!settings.IsBlockedNavigationUri(nestedUri))
                     throw new InvalidOperationException("Nested blocked route is not blocked: " + nestedUri);
+
+                var encodedUri = new Uri("https://hopon.co.il" + blockedPath + "%252fprobe");
+                if (!settings.IsBlockedNavigationUri(encodedUri))
+                    throw new InvalidOperationException("Encoded blocked route is not blocked: " + encodedUri);
+
+                var upperUri = new Uri("https://hopon.co.il" + blockedPath.ToUpperInvariant());
+                if (!settings.IsBlockedNavigationUri(upperUri))
+                    throw new InvalidOperationException("Case-variant blocked route is not blocked: " + upperUri);
             }
 
             Directory.CreateDirectory(_userDataFolder);
