@@ -1,4 +1,4 @@
-#define MyAppName "עמדת טעינה HopOn"
+#define MyAppName "עמדת טעינה רב-קו"
 #define MyAppVersion "1.1.0"
 #define MyAppPublisher "RavKavKiosk"
 #define MyAppExeName "RavKavKiosk.exe"
