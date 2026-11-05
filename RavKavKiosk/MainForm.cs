@@ -238,6 +238,7 @@ internal sealed class MainForm : Form
 
                 await _browser.EnsureCoreWebView2Async(_webViewEnvironment);
                 var core = _browser.CoreWebView2;
+                core.DefaultBackgroundColor = Color.FromArgb(10, 7, 5);
                 core.Settings.AreDefaultContextMenusEnabled = false;
                 core.Settings.AreDevToolsEnabled = false;
                 core.Settings.IsStatusBarEnabled = false;
