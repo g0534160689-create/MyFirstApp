@@ -238,7 +238,7 @@ internal sealed class MainForm : Form
             "use strict";
             const allowedOrigin = {{originJson}};
             const blockedRoots = {{blockedPathsJson}}.map(p =>
-                String(p).replace(/\\\\/g, "/").replace(/\\/+$/g, "").toLowerCase()
+                String(p).replace(/\\/g, "/").replace(/\/+$/g, "").toLowerCase()
             );
 
             function normalizedPath(value) {
@@ -250,19 +250,19 @@ internal sealed class MainForm : Form
                     for (let i = 0; i < 10; i++) {
                         let decoded;
                         try { decoded = decodeURIComponent(path); }
-                        catch { return null; }
+                        catch { return "__BLOCK_INVALID__"; }
                         if (decoded === path) break;
                         path = decoded;
                     }
 
-                    path = path.replace(/\\\\/g, "/").replace(/\\/{2,}/g, "/");
+                    path = path.replace(/\\/g, "/").replace(/\/{2,}/g, "/");
                     const parts = [];
                     for (const part of path.split("/")) {
                         if (!part || part === ".") continue;
                         if (part === "..") { parts.pop(); continue; }
                         parts.push(part);
                     }
-                    return ("/" + parts.join("/")).toLowerCase().replace(/\\/+$/g, "") || "/";
+                    return ("/" + parts.join("/")).toLowerCase().replace(/\/+$/g, "") || "/";
                 } catch {
                     return null;
                 }
@@ -270,6 +270,7 @@ internal sealed class MainForm : Form
 
             function isBlocked(value) {
                 const path = normalizedPath(value);
+                if (path === "__BLOCK_INVALID__") return true;
                 if (path === null) return false;
                 return blockedRoots.some(root =>
                     path === root ||
@@ -352,7 +353,7 @@ internal sealed class MainForm : Form
             new MemoryStream(Array.Empty<byte>()),
             403,
             "Blocked by kiosk policy",
-            "Content-Type: text/plain; charset=utf-8\\r\\nCache-Control: no-store");
+            "Content-Type: text/plain; charset=utf-8\r\nCache-Control: no-store");
     }
 
     private void ShowHome()
