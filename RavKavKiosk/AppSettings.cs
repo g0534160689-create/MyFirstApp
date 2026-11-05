@@ -39,7 +39,7 @@ internal sealed class AppSettings
                string.IsNullOrEmpty(uri.UserInfo);
     }
 
-    // Block only the explicitly forbidden pages (including their nested routes).
+    // Block the exact route and any nested/encoded variant of that route.
     public bool IsBlockedNavigationUri(Uri uri)
     {
         if (!uri.IsAbsoluteUri) return true;
@@ -47,7 +47,8 @@ internal sealed class AppSettings
         var path = uri.AbsolutePath;
         try
         {
-            for (var i = 0; i < 5 && path.Contains('%'); i++)
+            // Repeated decoding catches ordinary and double-encoded path tricks.
+            for (var i = 0; i < 10 && path.Contains('%'); i++)
             {
                 var decoded = Uri.UnescapeDataString(path);
                 if (decoded == path) break;
@@ -56,12 +57,32 @@ internal sealed class AppSettings
         }
         catch { return true; }
 
-        path = path.TrimEnd('/');
-        return BlockedPaths.Any(blocked =>
+        // Fail closed if a suspiciously encoded path remains after repeated decoding.
+        if (path.Contains('%')) return true;
+
+        path = path.Replace('\\', '/');
+        var segments = new List<string>();
+        foreach (var segment in path.Split('/'))
         {
-            var normalized = blocked.TrimEnd('/');
-            return path.Equals(normalized, StringComparison.OrdinalIgnoreCase) ||
-                   path.StartsWith(normalized + "/", StringComparison.OrdinalIgnoreCase);
+            if (segment.Length == 0 || segment == ".") continue;
+            if (segment == "..")
+            {
+                if (segments.Count > 0) segments.RemoveAt(segments.Count - 1);
+                continue;
+            }
+            segments.Add(segment);
+        }
+
+        var normalizedPath = "/" + string.Join("/", segments);
+        return (BlockedPaths ?? []).Any(blocked =>
+        {
+            var root = blocked.TrimEnd('/');
+            if (!normalizedPath.StartsWith(root, StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            if (normalizedPath.Length == root.Length) return true;
+            var next = normalizedPath[root.Length];
+            return next == '/' || next == ';' || next == '?' || next == '#';
         });
     }
-}
+}}
