@@ -44,3 +44,9 @@ https://github.com/g0534160689-create/MyFirstApp/actions
 dotnet publish RavKavKiosk/RavKavKiosk.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish
 iscc installer/RavKavKiosk.iss
 ```
+
+## שילוב WebView2 בתוכנה
+
+WebView2 מוטמע בתוך חלון WinForms של `RavKavKiosk.exe` ואינו פותח חלון Edge נפרד. התוכנה יוצרת סביבת WebView2 אחת ומשתמשת בפרופיל ייעודי תחת `%LOCALAPPDATA%\\RavKavKiosk\\WebView2`.
+
+במנהל המשימות, בלשונית **תהליכים**, Windows מקבץ בדרך כלל את תהליכי WebView2 תחת אפליקציית האב. בלשונית **פרטים** עדיין ניתן לראות תהליכי `msedgewebview2.exe` בנפרד. זהו אופן הפעולה התקין של WebView2 ואי אפשר לאחד אותם לתהליך EXE יחיד.
