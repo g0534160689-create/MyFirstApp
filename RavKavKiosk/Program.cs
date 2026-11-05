@@ -110,9 +110,17 @@ internal sealed class WebViewSmokeTestForm : Form
     {
         try
         {
-            // Construct the actual app form too: this validates startup UI resources,
-            // including the embedded yeshiva logo, without opening a visible kiosk window.
+            // Construct the actual app form too: this validates startup UI resources.
             using var mainWindow = new MainForm();
+            using (var logoStream = typeof(MainForm).Assembly.GetManifestResourceStream(
+                "RavKavKiosk.Assets.daat-logo.png"))
+            {
+                if (logoStream is null)
+                    throw new InvalidOperationException("Embedded logo resource is missing.");
+                using var logoImage = Image.FromStream(logoStream);
+                if (logoImage.Width < 1 || logoImage.Height < 1)
+                    throw new InvalidOperationException("Embedded logo image is invalid.");
+            }
 
             var settings = AppSettings.Load();
             if (!Uri.TryCreate(settings.StartUrl, UriKind.Absolute, out var start) ||

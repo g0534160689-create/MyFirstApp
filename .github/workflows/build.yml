@@ -13,6 +13,7 @@ permissions:
 jobs:
   build:
     runs-on: windows-latest
+    timeout-minutes: 25
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -37,23 +38,31 @@ jobs:
       - name: Build one-file installer
         run: iscc /DMyAppVersion=1.2.${{ github.run_number }} installer/RavKavKiosk.iss
 
-      - name: Install and smoke-test the actual installer
+      - name: Install the actual Setup package
         shell: pwsh
         run: |
           $installDir = Join-Path $env:RUNNER_TEMP "RavKavKiosk-SmokeInstall"
           if (Test-Path $installDir) { Remove-Item $installDir -Recurse -Force }
           $setup = Join-Path $PWD "installer-output/RavKavKiosk-Setup.exe"
+          Write-Host "Starting silent install: $setup"
           $install = Start-Process -FilePath $setup -ArgumentList @("/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/SP-", "/DIR=$installDir") -Wait -PassThru
+          Write-Host "Installer exit code: $($install.ExitCode)"
           if ($install.ExitCode -ne 0) { throw "Installer failed with exit code $($install.ExitCode)" }
           $installedExe = Join-Path $installDir "RavKavKiosk.exe"
           if (-not (Test-Path $installedExe)) { throw "Installed EXE was not found: $installedExe" }
-          $test = Start-Process -FilePath $installedExe -ArgumentList "--smoke-test" -Wait -PassThru
+
+      - name: Smoke-test installed app and WebView2
+        shell: pwsh
+        run: |
+          $installDir = Join-Path $env:RUNNER_TEMP "RavKavKiosk-SmokeInstall"
+          $installedExe = Join-Path $installDir "RavKavKiosk.exe"
           $smokeLog = Join-Path $env:LOCALAPPDATA "RavKavKiosk/Logs/RavKavKiosk.log"
-          if ($test.ExitCode -ne 0) {
-            if (Test-Path $smokeLog) { Get-Content $smokeLog }
-            throw "Installed application smoke test failed with exit code $($test.ExitCode)"
-          }
+          if (Test-Path $smokeLog) { Remove-Item $smokeLog -Force }
+          Write-Host "Starting installed app self-test: $installedExe"
+          $test = Start-Process -FilePath $installedExe -ArgumentList "--smoke-test" -Wait -PassThru
+          Write-Host "Smoke-test exit code: $($test.ExitCode)"
           if (Test-Path $smokeLog) { Get-Content $smokeLog }
+          if ($test.ExitCode -ne 0) { throw "Installed app smoke test failed with exit code $($test.ExitCode)" }
 
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4
