@@ -254,6 +254,7 @@ internal sealed class MainForm : Form
                         if (decoded === path) break;
                         path = decoded;
                     }
+                    if (path.indexOf("%") !== -1) return "__BLOCK_INVALID__";
 
                     path = path.replace(/\\/g, "/").replace(/\/{2,}/g, "/");
                     const parts = [];
