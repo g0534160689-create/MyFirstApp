@@ -13,7 +13,8 @@ internal sealed class AppSettings
         "/ravkav",
         "/freeMonthly",
         "/freeMonthlyOtef",
-        "/accessibility"
+        "/accessibility",
+        "/map"
     ];
 
     public static AppSettings Load()
