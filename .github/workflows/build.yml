@@ -19,8 +19,13 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
-      - name: Restore
-        run: dotnet restore RavKavKiosk/RavKavKiosk.csproj
+      - name: Publish Windows x64 app
+        run: dotnet publish RavKavKiosk/RavKavKiosk.csproj --configuration Release --runtime win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish
 
-      - name: Build
-        run: dotnet build RavKavKiosk/RavKavKiosk.csproj --configuration Release --no-restore
+      - name: Upload ready-to-run package
+        uses: actions/upload-artifact@v4
+        with:
+          name: RavKavKiosk-win-x64
+          path: publish/
+          if-no-files-found: error
+          retention-days: 30
