@@ -166,7 +166,8 @@ internal sealed class MainForm : Form
             }
 
             if (!Uri.TryCreate(_settings.StartUrl, UriKind.Absolute, out var start) ||
-                !_settings.IsAllowedNavigationUri(start))
+                !_settings.IsAllowedNavigationUri(start) ||
+                _settings.IsBlockedNavigationUri(start))
                 throw new InvalidOperationException("כתובת השירות אינה מאושרת בהגדרות.");
 
             _browser.CoreWebView2.Navigate(start.ToString());
@@ -186,9 +187,10 @@ internal sealed class MainForm : Form
     {
         if (_browser.CoreWebView2 is null) return;
         if (!Uri.TryCreate(_browser.CoreWebView2.Source, UriKind.Absolute, out var current) ||
-            !_settings.IsAllowedNavigationUri(current))
+            !_settings.IsAllowedNavigationUri(current) ||
+            _settings.IsBlockedNavigationUri(current))
         {
-            _status.Text = "העמוד נחסם. ניתן להשתמש בעמוד הטעינה בלבד.";
+            _status.Text = "העמוד הזה אינו זמין בעמדת הטעינה.";
             _browser.CoreWebView2.Navigate(_settings.StartUrl);
         }
     }
@@ -204,10 +206,11 @@ internal sealed class MainForm : Form
     private void OnNavigationStarting(object? sender, CoreWebView2NavigationStartingEventArgs e)
     {
         if (!Uri.TryCreate(e.Uri, UriKind.Absolute, out var target) ||
-            !_settings.IsAllowedNavigationUri(target))
+            !_settings.IsAllowedNavigationUri(target) ||
+            _settings.IsBlockedNavigationUri(target))
         {
             e.Cancel = true;
-            _status.Text = "המעבר נחסם: ניתן להשתמש בעמוד הטעינה בלבד.";
+            _status.Text = "העמוד המבוקש אינו זמין בעמדה זו.";
         }
     }
 
@@ -215,7 +218,8 @@ internal sealed class MainForm : Form
     {
         e.Handled = true;
         if (Uri.TryCreate(e.Uri, UriKind.Absolute, out var target) &&
-            _settings.IsAllowedNavigationUri(target))
+            _settings.IsAllowedNavigationUri(target) &&
+            !_settings.IsBlockedNavigationUri(target))
             _browser.CoreWebView2.Navigate(target.ToString());
         else
             _status.Text = "חלון חיצוני נחסם.";
