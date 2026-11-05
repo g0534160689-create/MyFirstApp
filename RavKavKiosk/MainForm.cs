@@ -478,8 +478,7 @@ internal sealed class MainForm : Form
     {
         if (!Uri.TryCreate(e.Uri, UriKind.Absolute, out var target) ||
             !_settings.IsAllowedNavigationUri(target) ||
-            (_settings.IsBlockedNavigationUri(target) &&
-             !(_settings.IsRavKavUri(target) && !e.IsUserInitiated)))
+            (_settings.IsBlockedNavigationUri(target) && !_settings.IsRavKavUri(target)))
         {
             e.Cancel = true;
             _status.Text = "העמוד המבוקש חסום בעמדה זו.";
@@ -491,7 +490,7 @@ internal sealed class MainForm : Form
         e.Handled = true;
         if (Uri.TryCreate(e.Uri, UriKind.Absolute, out var target) &&
             _settings.IsAllowedNavigationUri(target) &&
-            !_settings.IsBlockedNavigationUri(target))
+            (!_settings.IsBlockedNavigationUri(target) || _settings.IsRavKavUri(target)))
             _browser.CoreWebView2.Navigate(target.ToString());
         else
             _status.Text = "חלון חיצוני נחסם.";
