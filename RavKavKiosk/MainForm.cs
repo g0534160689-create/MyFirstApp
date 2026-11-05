@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
 
@@ -167,13 +168,31 @@ internal sealed class MainForm : Form
                 core.Settings.IsStatusBarEnabled = false;
                 core.Settings.IsZoomControlEnabled = false;
                 core.Settings.AreBrowserAcceleratorKeysEnabled = false;
+                // Install every blocking layer before the first page navigation.
                 core.NavigationStarting += OnNavigationStarting;
+                core.FrameNavigationStarting += OnFrameNavigationStarting;
                 core.HistoryChanged += (_, _) => EnforceCurrentPage();
                 core.NewWindowRequested += OnNewWindowRequested;
+
+                core.AddWebResourceRequestedFilter(
+                    "https://hopon.co.il/*",
+                    CoreWebView2WebResourceContext.Document,
+                    CoreWebView2WebResourceRequestSourceKinds.All);
+                core.WebResourceRequested += OnWebResourceRequested;
+
+                await core.AddScriptToExecuteOnDocumentCreatedAsync(BuildRouteGuardScript());
                 core.DownloadStarting += (_, args) => args.Cancel = true;
                 core.LaunchingExternalUriScheme += OnLaunchingExternalUriScheme;
                 core.PermissionRequested += (_, args) => args.State = CoreWebView2PermissionState.Deny;
-                core.SourceChanged += (_, _) => _status.Text = "שירות HopOn";
+                core.SourceChanged += (_, _) =>
+                {
+                    EnforceCurrentPage();
+                    if (_browser.CoreWebView2 is not null &&
+                        Uri.TryCreate(_browser.CoreWebView2.Source, UriKind.Absolute, out var current) &&
+                        _settings.IsAllowedNavigationUri(current) &&
+                        !_settings.IsBlockedNavigationUri(current))
+                        _status.Text = "שירות HopOn";
+                };
                 core.ProcessFailed += (_, _) => _status.Text = "אירעה תקלה. חזור ונסה שוב.";
                 _browserInitialized = true;
             }
@@ -208,6 +227,134 @@ internal sealed class MainForm : Form
         }
     }
 
+    private string BuildRouteGuardScript()
+    {
+        var origin = new Uri(_settings.StartUrl).GetLeftPart(UriPartial.Authority);
+        var originJson = JsonSerializer.Serialize(origin);
+        var blockedPathsJson = JsonSerializer.Serialize(_settings.BlockedPaths);
+
+        return $"""
+        (() => {
+            "use strict";
+            const allowedOrigin = {{originJson}};
+            const blockedRoots = {{blockedPathsJson}}.map(p =>
+                String(p).replace(/\\\\/g, "/").replace(/\\/+$/g, "").toLowerCase()
+            );
+
+            function normalizedPath(value) {
+                try {
+                    const url = new URL(String(value), location.href);
+                    if (url.origin !== allowedOrigin) return null;
+
+                    let path = url.pathname;
+                    for (let i = 0; i < 10; i++) {
+                        let decoded;
+                        try { decoded = decodeURIComponent(path); }
+                        catch { return null; }
+                        if (decoded === path) break;
+                        path = decoded;
+                    }
+
+                    path = path.replace(/\\\\/g, "/").replace(/\\/{2,}/g, "/");
+                    const parts = [];
+                    for (const part of path.split("/")) {
+                        if (!part || part === ".") continue;
+                        if (part === "..") { parts.pop(); continue; }
+                        parts.push(part);
+                    }
+                    return ("/" + parts.join("/")).toLowerCase().replace(/\\/+$/g, "") || "/";
+                } catch {
+                    return null;
+                }
+            }
+
+            function isBlocked(value) {
+                const path = normalizedPath(value);
+                if (path === null) return false;
+                return blockedRoots.some(root =>
+                    path === root ||
+                    path.startsWith(root + "/") ||
+                    path.startsWith(root + ";") ||
+                    path.startsWith(root + "?") ||
+                    path.startsWith(root + "#")
+                );
+            }
+
+            function notifyBlocked() {
+                try { window.chrome.webview.postMessage("kiosk-blocked-route"); } catch {}
+            }
+
+            // Stop SPA routers before they can change the visible URL.
+            for (const method of ["pushState", "replaceState"]) {
+                const original = history[method];
+                history[method] = function(state, title, url) {
+                    if (url != null && isBlocked(url)) {
+                        notifyBlocked();
+                        return;
+                    }
+                    return Reflect.apply(original, this, arguments);
+                };
+            }
+
+            // Stop ordinary links and form submissions in the capture phase.
+            document.addEventListener("click", event => {
+                const element = event.target instanceof Element ? event.target : null;
+                const link = element?.closest("a[href]");
+                if (link && isBlocked(link.href)) {
+                    event.preventDefault();
+                    event.stopImmediatePropagation();
+                    event.stopPropagation();
+                    notifyBlocked();
+                }
+            }, true);
+
+            document.addEventListener("submit", event => {
+                const form = event.target;
+                if (form instanceof HTMLFormElement && isBlocked(form.action)) {
+                    event.preventDefault();
+                    event.stopImmediatePropagation();
+                    event.stopPropagation();
+                    notifyBlocked();
+                }
+            }, true);
+
+            // Defensive fallback for a blocked entry already present in history.
+            window.addEventListener("popstate", () => {
+                if (isBlocked(location.href)) {
+                    history.forward();
+                    notifyBlocked();
+                }
+            }, true);
+        })();
+        """;
+    }
+
+    private void OnFrameNavigationStarting(object? sender, CoreWebView2NavigationStartingEventArgs e)
+    {
+        if (Uri.TryCreate(e.Uri, UriKind.Absolute, out var target) &&
+            _settings.IsAllowedNavigationUri(target) &&
+            _settings.IsBlockedNavigationUri(target))
+        {
+            e.Cancel = true;
+            _status.Text = "העמוד המבוקש חסום בעמדה זו.";
+        }
+    }
+
+    private void OnWebResourceRequested(object? sender, CoreWebView2WebResourceRequestedEventArgs e)
+    {
+        if (!Uri.TryCreate(e.Request.Uri, UriKind.Absolute, out var target) ||
+            !_settings.IsAllowedNavigationUri(target) ||
+            !_settings.IsBlockedNavigationUri(target))
+            return;
+
+        // A second network-level barrier: never pass a blocked HTML document to Chromium.
+        e.Response = _browser.CoreWebView2.Environment.CreateWebResourceResponse(
+            new MemoryStream(Array.Empty<byte>()),
+            403,
+            "Blocked by kiosk policy",
+            "Content-Type: text/plain; charset=utf-8\\r\\nCache-Control: no-store");
+    }
+
     private void ShowHome()
     {
         _browser.Visible = false;
@@ -223,7 +370,7 @@ internal sealed class MainForm : Form
             _settings.IsBlockedNavigationUri(target))
         {
             e.Cancel = true;
-            _status.Text = "העמוד המבוקש אינו זמין בעמדה זו.";
+            _status.Text = "העמוד המבוקש חסום בעמדה זו.";
         }
     }
 
