@@ -16,6 +16,7 @@ internal sealed class MainForm : Form
     };
     private readonly Button _start = new();
     private readonly Button _back = new();
+    private CoreWebView2Environment? _webViewEnvironment;
     private bool _browserInitialized;
 
     private static readonly Color Navy = Color.FromArgb(18, 48, 78);
@@ -147,7 +148,19 @@ internal sealed class MainForm : Form
         {
             if (!_browserInitialized)
             {
-                await _browser.EnsureCoreWebView2Async();
+                // Keep one WebView2 environment for this app and store its profile
+                // under the current user's LocalAppData (not beside the EXE).
+                var userDataFolder = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "RavKavKiosk",
+                    "WebView2");
+                Directory.CreateDirectory(userDataFolder);
+
+                _webViewEnvironment ??= await CoreWebView2Environment.CreateAsync(
+                    browserExecutableFolder: null,
+                    userDataFolder: userDataFolder);
+
+                await _browser.EnsureCoreWebView2Async(_webViewEnvironment);
                 var core = _browser.CoreWebView2;
                 core.Settings.AreDefaultContextMenusEnabled = false;
                 core.Settings.AreDevToolsEnabled = false;
