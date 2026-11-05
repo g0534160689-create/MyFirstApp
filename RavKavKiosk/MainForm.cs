@@ -267,7 +267,7 @@ internal sealed class MainForm : Form
                     if (!args.IsSuccess)
                     {
                         var error = new InvalidOperationException(
-                            $"טעינת HopOn נכשלה: {args.WebErrorStatus}");
+                            $"טעינת {_activeServiceName} נכשלה: {args.WebErrorStatus}");
                         AppDiagnostics.Write("NavigationCompleted", error);
                         _status.Text = $"הטעינה נכשלה: {args.WebErrorStatus}";
                     }
@@ -315,7 +315,7 @@ internal sealed class MainForm : Form
         if (_browser.CoreWebView2 is null) return;
         if (!Uri.TryCreate(_browser.CoreWebView2.Source, UriKind.Absolute, out var current) ||
             !_settings.IsAllowedNavigationUri(current) ||
-            _settings.IsBlockedNavigationUri(current))
+            (_settings.IsBlockedNavigationUri(current) && !_settings.IsRavKavUri(current)))
         {
             _status.Text = "העמוד הזה אינו זמין בעמדת הטעינה.";
             _browser.CoreWebView2.Navigate(_activeStartUrl);
@@ -393,7 +393,7 @@ internal sealed class MainForm : Form
             for (const method of ["pushState", "replaceState"]) {
                 const original = history[method];
                 history[method] = function(state, title, url) {
-                    if (url != null && isBlocked(url)) {
+                    if (!strictPath && url != null && isBlocked(url)) {
                         notifyBlocked();
                         return;
                     }
@@ -415,7 +415,7 @@ internal sealed class MainForm : Form
 
             document.addEventListener("submit", event => {
                 const form = event.target;
-                if (form instanceof HTMLFormElement && isBlocked(form.action)) {
+                if (!strictPath && form instanceof HTMLFormElement && isBlocked(form.action)) {
                     event.preventDefault();
                     event.stopImmediatePropagation();
                     event.stopPropagation();
@@ -425,7 +425,7 @@ internal sealed class MainForm : Form
 
             // Defensive fallback for a blocked entry already present in history.
             window.addEventListener("popstate", () => {
-                if (isBlocked(location.href)) {
+                if (!strictPath && isBlocked(location.href)) {
                     history.forward();
                     notifyBlocked();
                 }
@@ -478,7 +478,8 @@ internal sealed class MainForm : Form
     {
         if (!Uri.TryCreate(e.Uri, UriKind.Absolute, out var target) ||
             !_settings.IsAllowedNavigationUri(target) ||
-            _settings.IsBlockedNavigationUri(target))
+            (_settings.IsBlockedNavigationUri(target) &&
+             !(_settings.IsRavKavUri(target) && !e.IsUserInitiated)))
         {
             e.Cancel = true;
             _status.Text = "העמוד המבוקש חסום בעמדה זו.";
