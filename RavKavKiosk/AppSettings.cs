@@ -74,7 +74,9 @@ internal sealed class AppSettings
                    !path.Equals(NormalizePath(RavKavAllowedPath), StringComparison.OrdinalIgnoreCase);
         }
 
-        if (!IsHopOnUri(uri))\n            return !(PortalAllowedHosts ?? []).Any(host =>\n                uri.Host.Equals(host, StringComparison.OrdinalIgnoreCase));
+        if (!IsHopOnUri(uri))
+            return !(PortalAllowedHosts ?? []).Any(host =>
+                uri.Host.Equals(host, StringComparison.OrdinalIgnoreCase));
 
         var normalizedPath = NormalizePath(uri.AbsolutePath);
         if (normalizedPath is null) return true;
