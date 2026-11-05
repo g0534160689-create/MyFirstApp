@@ -29,7 +29,7 @@ internal sealed class MainForm : Form
 
     public MainForm()
     {
-        Text = "עמדת טעינה רב-קו";
+        Text = "פורטל אוצר החכמה";
         RightToLeft = RightToLeft.Yes;
         RightToLeftLayout = true;
         StartPosition = FormStartPosition.CenterScreen;
@@ -41,7 +41,7 @@ internal sealed class MainForm : Form
         var header = new Panel { Dock = DockStyle.Top, Height = 72, BackColor = Navy, Padding = new Padding(24, 0, 24, 0) };
         var brand = new Label
         {
-            Text = "אוצר החכמה | עמדת טעינה", Dock = DockStyle.Right, Width = 390,
+            Text = "אוצר החכמה | פורטל הישיבה", Dock = DockStyle.Right, Width = 430,
             ForeColor = Color.White, Font = new Font("Segoe UI", 19, FontStyle.Bold),
             TextAlign = ContentAlignment.MiddleRight
         };
@@ -67,34 +67,38 @@ internal sealed class MainForm : Form
         BuildHome();
     }
 
+    private sealed record PortalLink(string Id, string Title, string Subtitle, string Url, string Category, string Badge);
+
+    private static readonly PortalLink[] PortalLinks =
+    [
+        new("torah-dileyh", "תורה דיליה", "סיכומי סוגיות וכתיבת חבורות", "https://www.matara.pro/nedarimplus/online/?mosad=7005288", "tests", "נפוץ"),
+        new("print-charge", "הטענת הדפסות", "טעינת יתרת צילום והדפסה מהירה", "https://www.matara.pro/nedarimplus/Forms/4488.html?MasofId=&ClientId=&Zeout=&Version=1", "services", "שירות"),
+        new("dirshu", "מבחני דרשו", "ציונים, מועדי בחינות והרשמה", "https://matara.pro/nedarimplus/online/?mosad=7005954", "tests", "דרשו"),
+        new("yeshiva-kivro", "ישיבה על קברו", "מפעל הלימוד וההנצחה העולמי", "https://www.matara.pro/nedarimplus/v6/Mokirim14.html?Version=1", "learning", "מוקירים"),
+        new("ladaat", "מבחני לדעת", "מגוון מבחנים", "https://www.matara.pro/nedarimplus/Forms/976.html?MasofId=&ClientId=&Zeout=&Version=8", "tests", "מבחנים"),
+        new("siach-hatorah", "שיח התורה", "מבחנים בכל סגנונות התורה", "https://rishumon.net/SiachAtorah.html", "learning", "אוצר"),
+        new("torah-shebichtav", "תורה שבכתב", "עיון בטקסטים, מפרשים ודקדוק", "https://tora.irom.co.il/?Version=17", "learning", "מאגר")
+    ];
+
     private void BuildHome()
     {
         var layout = new TableLayoutPanel
         {
-            Dock = DockStyle.Fill,
-            ColumnCount = 1,
-            RowCount = 8,
-            Padding = new Padding(24, 10, 24, 12),
-            BackColor = _home.BackColor
+            Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 6,
+            Padding = new Padding(28, 10, 28, 12), BackColor = _home.BackColor
         };
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 180));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 112));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 95));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 76));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 76));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 32));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 32));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 92));
 
         var logo = new PictureBox
         {
-            Dock = DockStyle.Fill,
-            SizeMode = PictureBoxSizeMode.Zoom,
-            BackColor = Color.Transparent,
-            Margin = new Padding(0, 0, 0, 4)
+            Dock = DockStyle.Fill, SizeMode = PictureBoxSizeMode.Zoom,
+            BackColor = Color.Transparent, Margin = new Padding(0, 0, 0, 2)
         };
-
-        // The logo is embedded in the EXE, so no separate image file is needed.
         using (var logoStream = Assembly.GetExecutingAssembly()
             .GetManifestResourceStream("RavKavKiosk.Assets.daat-logo.png"))
         {
@@ -107,100 +111,111 @@ internal sealed class MainForm : Form
 
         var title = new Label
         {
-            Text = "אוצר החכמה",
-            Dock = DockStyle.Fill,
+            Text = "פורטל אוצר החכמה", Dock = DockStyle.Fill,
             Font = new Font("Segoe UI", 25, FontStyle.Bold),
-            ForeColor = Navy,
-            TextAlign = ContentAlignment.MiddleCenter
+            ForeColor = Navy, TextAlign = ContentAlignment.MiddleCenter
         };
         var subtitle = new Label
         {
-            Text = "ישיבת דעת אהרן",
-            Dock = DockStyle.Fill,
-            Font = new Font("Segoe UI", 19, FontStyle.Bold),
+            Text = "ישיבת דעת אהרן", Dock = DockStyle.Fill,
+            Font = new Font("Segoe UI", 17, FontStyle.Bold),
             ForeColor = Color.FromArgb(91, 29, 53),
             TextAlign = ContentAlignment.MiddleCenter
         };
-        var welcomeText = new Label
+        var intro = new Label
         {
-            Text = "להטעין את הרב־קו בלי לצאת מהישיבה",
-            Dock = DockStyle.Fill,
-            Font = new Font("Segoe UI", 17, FontStyle.Bold),
+            Text = "כל הקישורים והשירותים במקום אחד", Dock = DockStyle.Fill,
+            Font = new Font("Segoe UI", 12),
             ForeColor = Color.FromArgb(83, 101, 120),
             TextAlign = ContentAlignment.MiddleCenter
         };
 
-        var steps = new TableLayoutPanel
+        var cards = new FlowLayoutPanel
         {
-            Dock = DockStyle.Fill,
-            ColumnCount = 3,
-            RowCount = 1,
-            BackColor = Color.Transparent
+            Dock = DockStyle.Fill, AutoScroll = true, WrapContents = true,
+            FlowDirection = FlowDirection.RightToLeft,
+            BackColor = Color.Transparent, Padding = new Padding(8, 5, 8, 5)
         };
-        for (var i = 0; i < 3; i++)
-            steps.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.333f));
-        steps.Controls.Add(MakeStep("1", "מחברים קורא USB"), 0, 0);
-        steps.Controls.Add(MakeStep("2", "מצמידים את הכרטיס"), 1, 0);
-        steps.Controls.Add(MakeStep("3", "בוחרים טעינה ומשלמים"), 2, 0);
+        foreach (var link in PortalLinks)
+        {
+            var card = new Button
+            {
+                Width = 330, Height = 88, Margin = new Padding(9),
+                Text = $"{link.Title}\r\n{link.Subtitle}   •   {link.Badge}",
+                TextAlign = ContentAlignment.MiddleCenter,
+                Font = new Font("Segoe UI", 13, FontStyle.Bold),
+                ForeColor = Navy,
+                BackColor = link.Category switch
+                {
+                    "tests" => Color.FromArgb(255, 248, 225),
+                    "services" => Color.FromArgb(225, 247, 239),
+                    _ => Color.FromArgb(237, 244, 252)
+                },
+                FlatStyle = FlatStyle.Flat, Cursor = Cursors.Hand,
+                UseVisualStyleBackColor = false, Tag = link
+            };
+            card.FlatAppearance.BorderColor = Color.FromArgb(210, 222, 234);
+            card.FlatAppearance.BorderSize = 1;
+            card.Click += async (_, _) =>
+            {
+                if (card.Tag is PortalLink selected)
+                    await OpenOfficialServiceAsync(selected.Url, selected.Title);
+            };
+            cards.Controls.Add(card);
+        }
+
+        var services = new Panel
+        {
+            Dock = DockStyle.Fill, BackColor = Color.FromArgb(235, 241, 247),
+            Padding = new Padding(12, 7, 12, 7)
+        };
+        var serviceTitle = new Label
+        {
+            Text = "שירותים נוספים — הטענת רב־קו", Dock = DockStyle.Top,
+            Height = 28, Font = new Font("Segoe UI", 11, FontStyle.Bold),
+            ForeColor = Navy, TextAlign = ContentAlignment.MiddleCenter
+        };
+        var serviceButtons = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft,
+            WrapContents = false, BackColor = Color.Transparent
+        };
 
         _start.Text = "טעינה באמצעות HopOn";
-        _start.Dock = DockStyle.Fill;
-        _start.Margin = new Padding(120, 8, 120, 8);
-        _start.FlatStyle = FlatStyle.Flat;
-        _start.FlatAppearance.BorderSize = 0;
-        _start.BackColor = Blue;
-        _start.ForeColor = Color.White;
-        _start.Font = new Font("Segoe UI", 21, FontStyle.Bold);
-        _start.Cursor = Cursors.Hand;
+        StyleServiceButton(_start, Blue);
+        _start.Width = 250; _start.Height = 42;
+        _start.Margin = new Padding(8, 2, 8, 2);
         _start.Click += async (_, _) => await OpenOfficialServiceAsync(_settings.StartUrl, "HopOn");
 
         _ravKavStart.Text = "טעינה באמצעות רב-קו אונליין";
-        _ravKavStart.Dock = DockStyle.Fill;
-        _ravKavStart.Margin = new Padding(120, 4, 120, 4);
-        _ravKavStart.FlatStyle = FlatStyle.Flat;
-        _ravKavStart.FlatAppearance.BorderSize = 0;
-        _ravKavStart.BackColor = Color.FromArgb(35, 125, 88);
-        _ravKavStart.ForeColor = Color.White;
-        _ravKavStart.Font = new Font("Segoe UI", 18, FontStyle.Bold);
-        _ravKavStart.Cursor = Cursors.Hand;
+        StyleServiceButton(_ravKavStart, Color.FromArgb(35, 125, 88));
+        _ravKavStart.Width = 270; _ravKavStart.Height = 42;
+        _ravKavStart.Margin = new Padding(8, 2, 8, 2);
         _ravKavStart.Click += async (_, _) => await OpenOfficialServiceAsync(_settings.RavKavStartUrl, "רב-קו אונליין");
 
-        var note = new Label
-        {
-            Text = "הטעינה מתבצעת באתר הרשמי של השירות שנבחר",
-            Dock = DockStyle.Fill,
-            Font = new Font("Segoe UI", 10),
-            ForeColor = Color.FromArgb(105, 119, 133),
-            TextAlign = ContentAlignment.TopCenter
-        };
+        serviceButtons.Controls.Add(_start);
+        serviceButtons.Controls.Add(_ravKavStart);
+        services.Controls.Add(serviceButtons);
+        services.Controls.Add(serviceTitle);
 
         layout.Controls.Add(logo, 0, 0);
         layout.Controls.Add(title, 0, 1);
         layout.Controls.Add(subtitle, 0, 2);
-        layout.Controls.Add(welcomeText, 0, 3);
-        layout.Controls.Add(steps, 0, 4);
-        layout.Controls.Add(_start, 0, 5);
-        layout.Controls.Add(_ravKavStart, 0, 6);
-        layout.Controls.Add(note, 0, 7);
+        layout.Controls.Add(intro, 0, 3);
+        layout.Controls.Add(cards, 0, 4);
+        layout.Controls.Add(services, 0, 5);
         _home.Controls.Add(layout);
     }
 
-    private static Control MakeStep(string number, string caption)
+    private static void StyleServiceButton(Button button, Color background)
     {
-        var panel = new Panel { Dock = DockStyle.Fill, Margin = new Padding(10), BackColor = Color.White, Padding = new Padding(12) };
-        var numberLabel = new Label
-        {
-            Text = number, Dock = DockStyle.Top, Height = 46, ForeColor = Blue,
-            Font = new Font("Segoe UI", 24, FontStyle.Bold), TextAlign = ContentAlignment.MiddleCenter
-        };
-        var textLabel = new Label
-        {
-            Text = caption, Dock = DockStyle.Fill, ForeColor = Navy,
-            Font = new Font("Segoe UI", 13, FontStyle.Bold), TextAlign = ContentAlignment.TopCenter
-        };
-        panel.Controls.Add(textLabel);
-        panel.Controls.Add(numberLabel);
-        return panel;
+        button.FlatStyle = FlatStyle.Flat;
+        button.FlatAppearance.BorderSize = 0;
+        button.BackColor = background;
+        button.ForeColor = Color.White;
+        button.Font = new Font("Segoe UI", 11, FontStyle.Bold);
+        button.Cursor = Cursors.Hand;
+        button.UseVisualStyleBackColor = false;
     }
 
     private async Task OpenOfficialServiceAsync(string startUrl, string serviceName)
