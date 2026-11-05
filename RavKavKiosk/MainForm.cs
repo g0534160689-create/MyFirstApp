@@ -35,7 +35,7 @@ internal sealed class MainForm : Form
         var header = new Panel { Dock = DockStyle.Top, Height = 72, BackColor = Navy, Padding = new Padding(24, 0, 24, 0) };
         var brand = new Label
         {
-            Text = "רב־קו | עמדת טעינה", Dock = DockStyle.Right, Width = 330,
+            Text = "HopOn | עמדת טעינה", Dock = DockStyle.Right, Width = 330,
             ForeColor = Color.White, Font = new Font("Segoe UI", 19, FontStyle.Bold),
             TextAlign = ContentAlignment.MiddleRight
         };
@@ -105,7 +105,7 @@ internal sealed class MainForm : Form
 
         var note = new Label
         {
-            Text = "הטעינה והתשלום מתבצעים בשירות הרשמי של רב־קו אונליין.\r\nאין צורך ליצור חשבון בתוכנה הזו.",
+            Text = "הטעינה מתבצעת בשירות HopOn הרשמי.\r\nהתוכנה מאפשרת גישה לעמוד הטעינה בלבד.",
             Dock = DockStyle.Fill, Font = new Font("Segoe UI", 11),
             ForeColor = Color.FromArgb(105, 119, 133), TextAlign = ContentAlignment.TopCenter
         };
@@ -154,7 +154,7 @@ internal sealed class MainForm : Form
                 core.Settings.IsStatusBarEnabled = false;
                 core.Settings.IsZoomControlEnabled = false;
                 core.Settings.AreBrowserAcceleratorKeysEnabled = false;
-                core.NavigationStarting += OnNavigationStarting;
+                core.NavigationStarting += OnNavigationStarting;\n                await core.AddScriptToExecuteOnDocumentCreatedAsync(@"(() => {\n  const allowed = (value) => { try { const u = new URL(value, location.href); let p = u.pathname; while (p.includes(\"%\")) { const d = decodeURIComponent(p); if (d === p) break; p = d; } return u.protocol === \"https:\" && u.hostname.toLowerCase() === \"hopon.co.il\" && (p === \"/read\" || p === \"/read/\"); } catch { return false; } };\n  document.addEventListener(\"click\", e => { const a = e.target && e.target.closest ? e.target.closest(\"a[href]\") : null; if (a && !allowed(a.href)) { e.preventDefault(); e.stopImmediatePropagation(); } }, true);\n  for (const method of [\"pushState\", \"replaceState\"]) { const original = history[method].bind(history); history[method] = function(state, title, url) { if (url != null && !allowed(url)) return; return original(state, title, url); }; }\n  addEventListener(\"popstate\", () => { if (!allowed(location.href)) location.replace(\"https://hopon.co.il/read\"); }, true);\n})();");
                 core.NewWindowRequested += OnNewWindowRequested;
                 core.DownloadStarting += (_, args) => args.Cancel = true;
                 core.LaunchingExternalUriScheme += OnLaunchingExternalUriScheme;
