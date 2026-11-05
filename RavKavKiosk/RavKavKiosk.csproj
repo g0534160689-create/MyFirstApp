@@ -14,5 +14,6 @@
   </ItemGroup>
   <ItemGroup>
     <None Update="appsettings.json" CopyToOutputDirectory="PreserveNewest" />
+    <EmbeddedResource Include="Assets\daat-logo.png" LogicalName="RavKavKiosk.Assets.daat-logo.png" />
   </ItemGroup>
 </Project>

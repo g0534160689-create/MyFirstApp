@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Text.Json;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
@@ -37,7 +38,7 @@ internal sealed class MainForm : Form
         var header = new Panel { Dock = DockStyle.Top, Height = 72, BackColor = Navy, Padding = new Padding(24, 0, 24, 0) };
         var brand = new Label
         {
-            Text = "HopOn | עמדת טעינה", Dock = DockStyle.Right, Width = 330,
+            Text = "אוצר החכמה | עמדת טעינה", Dock = DockStyle.Right, Width = 390,
             ForeColor = Color.White, Font = new Font("Segoe UI", 19, FontStyle.Bold),
             TextAlign = ContentAlignment.MiddleRight
         };
@@ -67,56 +68,104 @@ internal sealed class MainForm : Form
     {
         var layout = new TableLayoutPanel
         {
-            Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 5,
-            Padding = new Padding(32, 26, 32, 24), BackColor = _home.BackColor
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 7,
+            Padding = new Padding(24, 10, 24, 12),
+            BackColor = _home.BackColor
         };
-        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 22));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 92));
-        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 22));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 118));
-        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 56));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 180));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 95));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 82));
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+
+        var logo = new PictureBox
+        {
+            Dock = DockStyle.Fill,
+            SizeMode = PictureBoxSizeMode.Zoom,
+            BackColor = Color.Transparent,
+            Margin = new Padding(0, 0, 0, 4)
+        };
+
+        // The logo is embedded in the EXE, so no separate image file is needed.
+        using (var logoStream = Assembly.GetExecutingAssembly()
+            .GetManifestResourceStream("RavKavKiosk.Assets.daat-logo.png"))
+        {
+            if (logoStream is not null)
+            {
+                using var sourceImage = Image.FromStream(logoStream);
+                logo.Image = new Bitmap(sourceImage);
+            }
+        }
 
         var title = new Label
         {
-            Text = "טעינת כרטיס רב־קו", Dock = DockStyle.Fill,
-            Font = new Font("Segoe UI", 30, FontStyle.Bold), ForeColor = Navy,
-            TextAlign = ContentAlignment.BottomCenter
+            Text = "אוצר החכמה",
+            Dock = DockStyle.Fill,
+            Font = new Font("Segoe UI", 25, FontStyle.Bold),
+            ForeColor = Navy,
+            TextAlign = ContentAlignment.MiddleCenter
         };
         var subtitle = new Label
         {
-            Text = "טוענים בקלות, בכמה צעדים פשוטים", Dock = DockStyle.Fill,
-            Font = new Font("Segoe UI", 16), ForeColor = Color.FromArgb(83, 101, 120),
-            TextAlign = ContentAlignment.TopCenter
+            Text = "ישיבת דעת אהרן",
+            Dock = DockStyle.Fill,
+            Font = new Font("Segoe UI", 19, FontStyle.Bold),
+            ForeColor = Color.FromArgb(91, 29, 53),
+            TextAlign = ContentAlignment.MiddleCenter
         };
-        var steps = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 1, BackColor = Color.Transparent };
-        for (var i = 0; i < 3; i++) steps.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.333f));
+        var welcomeText = new Label
+        {
+            Text = "להטעין את הרב־קו בלי לצאת מהישיבה",
+            Dock = DockStyle.Fill,
+            Font = new Font("Segoe UI", 17, FontStyle.Bold),
+            ForeColor = Color.FromArgb(83, 101, 120),
+            TextAlign = ContentAlignment.MiddleCenter
+        };
+
+        var steps = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 3,
+            RowCount = 1,
+            BackColor = Color.Transparent
+        };
+        for (var i = 0; i < 3; i++)
+            steps.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.333f));
         steps.Controls.Add(MakeStep("1", "מחברים קורא USB"), 0, 0);
         steps.Controls.Add(MakeStep("2", "מצמידים את הכרטיס"), 1, 0);
         steps.Controls.Add(MakeStep("3", "בוחרים טעינה ומשלמים"), 2, 0);
 
         _start.Text = "התחלת טעינה";
         _start.Dock = DockStyle.Fill;
-        _start.Margin = new Padding(120, 12, 120, 12);
+        _start.Margin = new Padding(120, 8, 120, 8);
         _start.FlatStyle = FlatStyle.Flat;
         _start.FlatAppearance.BorderSize = 0;
         _start.BackColor = Blue;
         _start.ForeColor = Color.White;
-        _start.Font = new Font("Segoe UI", 23, FontStyle.Bold);
+        _start.Font = new Font("Segoe UI", 21, FontStyle.Bold);
         _start.Cursor = Cursors.Hand;
         _start.Click += async (_, _) => await OpenOfficialServiceAsync();
 
         var note = new Label
         {
-            Text = "הטעינה מתבצעת בשירות HopOn הרשמי.\r\nהתוכנה מאפשרת גישה לעמוד הטעינה בלבד.",
-            Dock = DockStyle.Fill, Font = new Font("Segoe UI", 11),
-            ForeColor = Color.FromArgb(105, 119, 133), TextAlign = ContentAlignment.TopCenter
+            Text = "הטעינה מתבצעת בשירות HopOn הרשמי",
+            Dock = DockStyle.Fill,
+            Font = new Font("Segoe UI", 10),
+            ForeColor = Color.FromArgb(105, 119, 133),
+            TextAlign = ContentAlignment.TopCenter
         };
 
-        layout.Controls.Add(title, 0, 0);
-        layout.Controls.Add(subtitle, 0, 1);
-        layout.Controls.Add(steps, 0, 2);
-        layout.Controls.Add(_start, 0, 3);
-        layout.Controls.Add(note, 0, 4);
+        layout.Controls.Add(logo, 0, 0);
+        layout.Controls.Add(title, 0, 1);
+        layout.Controls.Add(subtitle, 0, 2);
+        layout.Controls.Add(welcomeText, 0, 3);
+        layout.Controls.Add(steps, 0, 4);
+        layout.Controls.Add(_start, 0, 5);
+        layout.Controls.Add(note, 0, 6);
         _home.Controls.Add(layout);
     }
 
