@@ -331,41 +331,25 @@ internal sealed class MainForm : Form
             if (control is PremiumCardPanel) control.Width = cardWidth;
     }
 
+    private bool _cardsCreated;
+    private Label? _emptyState;
+
     private void RenderCards()
     {
         if (_cardsPanel.IsDisposed) return;
-        _cardsPanel.SuspendLayout();
-        foreach (Control old in _cardsPanel.Controls) old.Dispose();
-        _cardsPanel.Controls.Clear();
-
-        var query = _searchBox.Text.Trim();
-        var filtered = PortalLinks.Where(link =>
-            (string.IsNullOrEmpty(query) ||
-             link.Title.Contains(query, StringComparison.CurrentCultureIgnoreCase) ||
-             link.Subtitle.Contains(query, StringComparison.CurrentCultureIgnoreCase)) &&
-            (_activeFilter == "all" || (_activeFilter == "fav"
-                ? _favorites.Contains(link.Id)
-                : link.Category == _activeFilter)))
-            .OrderByDescending(link => _favorites.Contains(link.Id))
-            .ThenByDescending(link => _clickCounts.GetValueOrDefault(link.Id))
-            .ToArray();
-
-        if (filtered.Length == 0)
+        if (_cardsCreated)
         {
-            _cardsPanel.Controls.Add(new Label
-            {
-                Text = "לא נמצאו תוצאות\r\nנסה לשנות את מילות החיפוש",
-                Width = 520, Height = 120, ForeColor = Color.FromArgb(231, 215, 184),
-                Font = new Font("Segoe UI", 15, FontStyle.Bold),
-                TextAlign = ContentAlignment.MiddleCenter, BackColor = Color.Transparent
-            });
+            ApplyCardFilter();
+            return;
         }
 
+        _cardsCreated = true;
+        _cardsPanel.SuspendLayout();
         var availableWidth = Math.Max(340, _cardsPanel.ClientSize.Width - 42);
         var columns = availableWidth >= 1120 ? 3 : availableWidth >= 720 ? 2 : 1;
         var cardWidth = Math.Clamp((availableWidth - (columns * 22)) / columns, 320, 470);
 
-        foreach (var link in filtered)
+        foreach (var link in PortalLinks)
         {
             var categoryColor = link.Category switch
             {
@@ -383,22 +367,17 @@ internal sealed class MainForm : Form
                 HoverBorderColor = Color.FromArgb(235, categoryColor)
             };
 
-            var accent = new Panel
-            {
-                Dock = DockStyle.Right, Width = 5, BackColor = categoryColor,
-                Margin = new Padding(0)
-            };
+            var accent = new Panel { Dock = DockStyle.Right, Width = 5, BackColor = categoryColor, Margin = new Padding(0) };
             var icon = new Label
             {
                 Text = link.Category switch { "tests" => "✧", "services" => "▣", _ => "▤" },
-                Dock = DockStyle.Right, Width = 62,
-                ForeColor = Color.FromArgb(255, 224, 164),
+                Dock = DockStyle.Right, Width = 62, ForeColor = Color.FromArgb(255, 224, 164),
                 Font = new Font("Segoe UI Symbol", 27, FontStyle.Bold),
-                TextAlign = ContentAlignment.MiddleCenter,
-                BackColor = Color.FromArgb(42, categoryColor)
+                TextAlign = ContentAlignment.MiddleCenter, BackColor = Color.FromArgb(42, categoryColor)
             };
             var fav = new Button
             {
+                Name = "favoriteButton",
                 Text = _favorites.Contains(link.Id) ? "★" : "☆",
                 Dock = DockStyle.Left, Width = 42,
                 FlatStyle = FlatStyle.Flat, ForeColor = Color.FromArgb(255, 218, 125),
@@ -410,11 +389,11 @@ internal sealed class MainForm : Form
             fav.Click += (_, _) =>
             {
                 if (!_favorites.Add(link.Id)) _favorites.Remove(link.Id);
-                RenderCards();
+                fav.Text = _favorites.Contains(link.Id) ? "★" : "☆";
+                ApplyCardFilter();
             };
 
             var content = new Panel { Dock = DockStyle.Fill, BackColor = Color.Transparent, Padding = new Padding(12, 0, 10, 0) };
-            var topLine = new Panel { Dock = DockStyle.Top, Height = 3, BackColor = Color.Transparent };
             var badge = new Label
             {
                 Text = "●  " + link.Badge.ToUpperInvariant(), Dock = DockStyle.Top, Height = 27,
@@ -424,30 +403,27 @@ internal sealed class MainForm : Form
             var title = new Label
             {
                 Text = link.Title, Dock = DockStyle.Top, Height = 42,
-                ForeColor = Color.FromArgb(255, 250, 239),
-                Font = new Font("Segoe UI", 17, FontStyle.Bold),
+                ForeColor = Color.FromArgb(255, 250, 239), Font = new Font("Segoe UI", 17, FontStyle.Bold),
                 TextAlign = ContentAlignment.MiddleRight, Cursor = Cursors.Hand
             };
             var description = new Label
             {
                 Text = link.Subtitle, Dock = DockStyle.Top, Height = 38,
-                ForeColor = Color.FromArgb(198, 188, 171),
-                Font = new Font("Segoe UI", 10),
+                ForeColor = Color.FromArgb(198, 188, 171), Font = new Font("Segoe UI", 10),
                 TextAlign = ContentAlignment.TopRight, Cursor = Cursors.Hand
             };
             var bottom = new Label
             {
+                Name = "entryCount",
                 Text = "כניסה לשירות  ←      " + _clickCounts.GetValueOrDefault(link.Id) + " כניסות",
                 Dock = DockStyle.Bottom, Height = 30,
-                ForeColor = Color.FromArgb(245, 207, 133),
-                Font = new Font("Segoe UI", 9, FontStyle.Bold),
+                ForeColor = Color.FromArgb(245, 207, 133), Font = new Font("Segoe UI", 9, FontStyle.Bold),
                 TextAlign = ContentAlignment.MiddleRight, Cursor = Cursors.Hand
             };
             content.Controls.Add(bottom);
             content.Controls.Add(description);
             content.Controls.Add(title);
             content.Controls.Add(badge);
-            content.Controls.Add(topLine);
             card.Controls.Add(content);
             card.Controls.Add(icon);
             card.Controls.Add(fav);
@@ -456,7 +432,7 @@ internal sealed class MainForm : Form
             void Launch()
             {
                 _clickCounts[link.Id] = _clickCounts.GetValueOrDefault(link.Id) + 1;
-                RenderCards();
+                bottom.Text = "כניסה לשירות  ←      " + _clickCounts[link.Id] + " כניסות";
                 _ = OpenOfficialServiceAsync(link.Url, link.Title);
             }
             card.Click += (_, _) => Launch();
@@ -467,7 +443,49 @@ internal sealed class MainForm : Form
             icon.Click += (_, _) => Launch();
             _cardsPanel.Controls.Add(card);
         }
+
+        _emptyState = new Label
+        {
+            Text = "לא נמצאו תוצאות\r\nנסה לשנות את מילות החיפוש",
+            Width = 520, Height = 120, ForeColor = Color.FromArgb(231, 215, 184),
+            Font = new Font("Segoe UI", 15, FontStyle.Bold),
+            TextAlign = ContentAlignment.MiddleCenter, BackColor = Color.Transparent,
+            Visible = false
+        };
+        _cardsPanel.Controls.Add(_emptyState);
         _cardsPanel.ResumeLayout();
+        ApplyCardFilter();
+    }
+
+    private void ApplyCardFilter()
+    {
+        if (_cardsPanel.IsDisposed) return;
+        var query = _searchBox.Text.Trim();
+        var visibleCount = 0;
+        _cardsPanel.SuspendLayout();
+        foreach (Control control in _cardsPanel.Controls)
+        {
+            if (control is not PremiumCardPanel card || card.Tag is not PortalLink link) continue;
+            var matchesText = string.IsNullOrEmpty(query) ||
+                link.Title.Contains(query, StringComparison.CurrentCultureIgnoreCase) ||
+                link.Subtitle.Contains(query, StringComparison.CurrentCultureIgnoreCase);
+            var matchesFilter = _activeFilter == "all" ||
+                (_activeFilter == "fav" ? _favorites.Contains(link.Id) : link.Category == _activeFilter);
+            card.Visible = matchesText && matchesFilter;
+            if (card.Visible) visibleCount++;
+        }
+        if (_emptyState is not null) _emptyState.Visible = visibleCount == 0;
+        _cardsPanel.ResumeLayout();
+    }
+
+    private void ResizeExistingCards()
+    {
+        if (_cardsPanel.IsDisposed || _cardsPanel.ClientSize.Width <= 0) return;
+        var availableWidth = Math.Max(340, _cardsPanel.ClientSize.Width - 42);
+        var columns = availableWidth >= 1120 ? 3 : availableWidth >= 720 ? 2 : 1;
+        var cardWidth = Math.Clamp((availableWidth - (columns * 22)) / columns, 320, 470);
+        foreach (Control control in _cardsPanel.Controls)
+            if (control is PremiumCardPanel) control.Width = cardWidth;
     }
 
     private sealed class BufferedFlowLayoutPanel : FlowLayoutPanel
