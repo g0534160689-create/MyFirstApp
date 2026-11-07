@@ -16,6 +16,6 @@
     <None Update="appsettings.json" CopyToOutputDirectory="PreserveNewest" />
     <EmbeddedResource Include="Assets\daat-logo.png" LogicalName="RavKavKiosk.Assets.daat-logo.png" />
     <Content Include="Assets\bg.jpg" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" Condition="Exists('Assets\bg.jpg')" />
-    <Content Include="Assets\otzar-logo.png" CopyToOutputDirectory="PreserveNewest" Condition="Exists('Assets\otzar-logo.png')" />
+    <Content Include="Assets\otzar-logo.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" Condition="Exists('Assets\otzar-logo.png')" />
   </ItemGroup>
 </Project>
