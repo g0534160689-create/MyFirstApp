@@ -590,6 +590,10 @@ internal sealed class MainForm : Form
                     "https://hopon.co.il/*",
                     CoreWebView2WebResourceContext.Document,
                     CoreWebView2WebResourceRequestSourceKinds.All);
+                core.AddWebResourceRequestedFilter(
+                    "https://ravkavonline.co.il/*",
+                    CoreWebView2WebResourceContext.Document,
+                    CoreWebView2WebResourceRequestSourceKinds.All);
                 core.WebResourceRequested += OnWebResourceRequested;
 
                 await core.AddScriptToExecuteOnDocumentCreatedAsync(BuildRouteGuardScript(_settings.StartUrl));
@@ -659,7 +663,7 @@ internal sealed class MainForm : Form
         if (_browser.CoreWebView2 is null) return;
         if (!Uri.TryCreate(_browser.CoreWebView2.Source, UriKind.Absolute, out var current) ||
             !_settings.IsAllowedNavigationUri(current) ||
-            (_settings.IsBlockedNavigationUri(current) && !_settings.IsRavKavUri(current)))
+            _settings.IsBlockedNavigationUri(current))
         {
             _status.Text = "העמוד הזה אינו זמין בעמדת הטעינה.";
             _browser.CoreWebView2.Navigate(_activeStartUrl);
@@ -786,8 +790,8 @@ internal sealed class MainForm : Form
 
     private void OnFrameNavigationStarting(object? sender, CoreWebView2NavigationStartingEventArgs e)
     {
-        if (Uri.TryCreate(e.Uri, UriKind.Absolute, out var target) &&
-            _settings.IsHopOnUri(target) &&
+        if (!Uri.TryCreate(e.Uri, UriKind.Absolute, out var target) ||
+            !_settings.IsAllowedNavigationUri(target) ||
             _settings.IsBlockedNavigationUri(target))
         {
             e.Cancel = true;
@@ -822,7 +826,7 @@ internal sealed class MainForm : Form
     {
         if (!Uri.TryCreate(e.Uri, UriKind.Absolute, out var target) ||
             !_settings.IsAllowedNavigationUri(target) ||
-            (_settings.IsBlockedNavigationUri(target) && !_settings.IsRavKavUri(target)))
+            _settings.IsBlockedNavigationUri(target))
         {
             e.Cancel = true;
             _status.Text = "העמוד המבוקש חסום בעמדה זו.";
@@ -834,7 +838,7 @@ internal sealed class MainForm : Form
         e.Handled = true;
         if (Uri.TryCreate(e.Uri, UriKind.Absolute, out var target) &&
             _settings.IsAllowedNavigationUri(target) &&
-            (!_settings.IsBlockedNavigationUri(target) || _settings.IsRavKavUri(target)))
+            !_settings.IsBlockedNavigationUri(target))
             _browser.CoreWebView2.Navigate(target.ToString());
         else
             _status.Text = "חלון חיצוני נחסם.";
