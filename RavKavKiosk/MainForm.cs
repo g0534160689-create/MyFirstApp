@@ -41,6 +41,8 @@ internal sealed class MainForm : Form
         Text = "ישיבת דעת אהרן | כל מה שצריך בלי לצאת מהישיבה";
         RightToLeft = RightToLeft.Yes;
         RightToLeftLayout = true;
+        DoubleBuffered = true;
+        SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
         StartPosition = FormStartPosition.CenterScreen;
         WindowState = FormWindowState.Maximized;
         MinimumSize = new Size(760, 560);
@@ -272,6 +274,7 @@ internal sealed class MainForm : Form
         layout.Controls.Add(_cardsPanel, 0, 5);
         layout.Controls.Add(ravPanel, 0, 6);
         _home.Controls.Add(layout);
+        _cardsPanel.Resize += (_, _) => ResizeExistingCards();
         RenderCards();
     }
 
