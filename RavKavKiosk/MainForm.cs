@@ -321,16 +321,6 @@ internal sealed class MainForm : Form
         host.Controls.Add(button);
     }
 
-    private void ResizeExistingCards()
-    {
-        if (_cardsPanel.IsDisposed || _cardsPanel.ClientSize.Width <= 0) return;
-        var availableWidth = Math.Max(340, _cardsPanel.ClientSize.Width - 42);
-        var columns = availableWidth >= 1120 ? 3 : availableWidth >= 720 ? 2 : 1;
-        var cardWidth = Math.Clamp((availableWidth - (columns * 22)) / columns, 320, 470);
-        foreach (Control control in _cardsPanel.Controls)
-            if (control is PremiumCardPanel) control.Width = cardWidth;
-    }
-
     private bool _cardsCreated;
     private Label? _emptyState;
 
