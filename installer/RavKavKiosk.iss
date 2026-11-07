@@ -29,6 +29,10 @@ Name: "hebrew"; MessagesFile: "compiler:Languages\Hebrew.isl"
 [Tasks]
 Name: "desktopicon"; Description: "יצירת קיצור דרך בשולחן העבודה"; GroupDescription: "קיצורי דרך:"; Flags: unchecked
 
+[Dirs]
+; User can manually place branding images here after installation.
+Name: "{app}\Assets"; Permissions: users-modify
+
 [Files]
 Source: "..\publish\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\webview2\MicrosoftEdgeWebView2RuntimeInstallerX64.exe"; Flags: dontcopy
