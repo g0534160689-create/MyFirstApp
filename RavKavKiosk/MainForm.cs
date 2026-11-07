@@ -29,7 +29,8 @@ internal sealed class MainForm : Form
     private static readonly Color Gold = Color.FromArgb(229, 184, 105);
     private readonly System.Windows.Forms.Timer _clockTimer = new() { Interval = 1000 };
     private readonly TextBox _searchBox = new();
-    private readonly FlowLayoutPanel _cardsPanel = new();
+    private readonly BufferedFlowLayoutPanel _cardsPanel = new();
+    private readonly System.Windows.Forms.Timer _searchTimer = new() { Interval = 180 };
     private readonly Label _dateClock = new();
     private string _activeFilter = "all";
     private readonly HashSet<string> _favorites = new(StringComparer.Ordinal);
@@ -43,7 +44,7 @@ internal sealed class MainForm : Form
         StartPosition = FormStartPosition.CenterScreen;
         WindowState = FormWindowState.Maximized;
         MinimumSize = new Size(760, 560);
-        BackColor = Color.White;
+        BackColor = Color.FromArgb(10, 7, 5);
         Font = new Font("Segoe UI", 10);
 
         var header = new Panel { Dock = DockStyle.Top, Height = 68, BackColor = Color.FromArgb(18, 13, 10), Padding = new Padding(30, 0, 30, 0) };
@@ -74,6 +75,7 @@ internal sealed class MainForm : Form
         Controls.Add(header);
         BuildHome();
         _clockTimer.Tick += (_, _) => UpdateDateClock();
+        _searchTimer.Tick += (_, _) => { _searchTimer.Stop(); RenderCards(); };
         _clockTimer.Start();
         UpdateDateClock();
     }
@@ -97,7 +99,7 @@ internal sealed class MainForm : Form
         var bgPath = Path.Combine(AppContext.BaseDirectory, "Assets", "bg.jpg");
         if (File.Exists(bgPath))
         {
-            try { using var image = Image.FromFile(bgPath); _home.BackgroundImage = new Bitmap(image); _home.BackgroundImageLayout = ImageLayout.Stretch; }
+            try { _home.BackgroundImage = LoadOptimizedImage(bgPath, 1920, 1080); _home.BackgroundImageLayout = ImageLayout.Stretch; }
             catch (Exception ex) { AppDiagnostics.Write("Load background image", ex); }
         }
 
@@ -122,8 +124,7 @@ internal sealed class MainForm : Form
             try
             {
                 var picture = new PictureBox { Dock = DockStyle.Right, Width = 176, SizeMode = PictureBoxSizeMode.Zoom, BackColor = Color.FromArgb(245, 255, 255, 255), Padding = new Padding(8) };
-                using var image = Image.FromFile(partnerPath);
-                picture.Image = new Bitmap(image);
+                picture.Image = LoadOptimizedImage(partnerPath, 480, 260);
                 meta.Controls.Add(picture);
             }
             catch (Exception ex)
@@ -173,7 +174,7 @@ internal sealed class MainForm : Form
         var logoPath = Path.Combine(AppContext.BaseDirectory, "Assets", "daat-logo.png");
         if (File.Exists(logoPath))
         {
-            try { using var image = Image.FromFile(logoPath); logo.Image = new Bitmap(image); }
+            try { logo.Image = LoadOptimizedImage(logoPath, 640, 640); }
             catch (Exception ex) { AppDiagnostics.Write("Load daat logo", ex); }
         }
         else
@@ -181,10 +182,12 @@ internal sealed class MainForm : Form
             try
             {
                 using var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("RavKavKiosk.Assets.daat-logo.png");
-                if (stream is not null) logo.Image = new Bitmap(stream);
+                if (stream is not null) using (var image = Image.FromStream(stream)) logo.Image = new Bitmap(image);
             }
             catch (Exception ex) { AppDiagnostics.Write("Load embedded daat logo", ex); }
         }
+        if (logo.Image is null)
+            logo.Controls.Add(new Label { Text = "דעת אהרן", Dock = DockStyle.Fill, ForeColor = Gold, Font = new Font("Segoe UI", 18, FontStyle.Bold), TextAlign = ContentAlignment.MiddleCenter, BackColor = Color.Transparent });
         heroLayout.Controls.Add(heroText, 0, 0);
         heroLayout.Controls.Add(logo, 1, 0);
         hero.Controls.Add(heroLayout);
@@ -210,7 +213,7 @@ internal sealed class MainForm : Form
         _searchBox.Font = new Font("Segoe UI", 14);
         _searchBox.TextAlign = HorizontalAlignment.Right;
         _searchBox.PlaceholderText = "חיפוש מהיר — הקלד שם שירות, מבחן או נושא...";
-        _searchBox.TextChanged += (_, _) => RenderCards();
+        _searchBox.TextChanged += (_, _) => { _searchTimer.Stop(); _searchTimer.Start(); };
         searchHost.Controls.Add(_searchBox);
         searchHost.Controls.Add(searchLabel);
 
@@ -272,6 +275,26 @@ internal sealed class MainForm : Form
         RenderCards();
     }
 
+    private static Image LoadOptimizedImage(string path, int maxWidth, int maxHeight)
+    {
+        // Read bytes first so the user's file is never kept locked by the running app.
+        var bytes = File.ReadAllBytes(path);
+        using var stream = new MemoryStream(bytes, writable: false);
+        using var source = Image.FromStream(stream, useEmbeddedColorManagement: false, validateImageData: true);
+        var scale = Math.Min(1d, Math.Min((double)maxWidth / source.Width, (double)maxHeight / source.Height));
+        var width = Math.Max(1, (int)Math.Round(source.Width * scale));
+        var height = Math.Max(1, (int)Math.Round(source.Height * scale));
+        var bitmap = new Bitmap(width, height);
+        using (var graphics = Graphics.FromImage(bitmap))
+        {
+            graphics.CompositingQuality = System.Drawing.Drawing2D.CompositingQuality.HighQuality;
+            graphics.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+            graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.HighQuality;
+            graphics.DrawImage(source, new Rectangle(0, 0, width, height));
+        }
+        return bitmap;
+    }
+
     private static Control CreatePartnerFallback() =>
         new Label
         {
@@ -293,6 +316,16 @@ internal sealed class MainForm : Form
         };
         if (filter == "all") { button.ForeColor = Color.FromArgb(253, 230, 138); button.BackColor = Color.FromArgb(95, 116, 75, 30); }
         host.Controls.Add(button);
+    }
+
+    private void ResizeExistingCards()
+    {
+        if (_cardsPanel.IsDisposed || _cardsPanel.ClientSize.Width <= 0) return;
+        var availableWidth = Math.Max(340, _cardsPanel.ClientSize.Width - 42);
+        var columns = availableWidth >= 1120 ? 3 : availableWidth >= 720 ? 2 : 1;
+        var cardWidth = Math.Clamp((availableWidth - (columns * 22)) / columns, 320, 470);
+        foreach (Control control in _cardsPanel.Controls)
+            if (control is PremiumCardPanel) control.Width = cardWidth;
     }
 
     private void RenderCards()
@@ -434,12 +467,21 @@ internal sealed class MainForm : Form
         _cardsPanel.ResumeLayout();
     }
 
+    private sealed class BufferedFlowLayoutPanel : FlowLayoutPanel
+    {
+        public BufferedFlowLayoutPanel()
+        {
+            DoubleBuffered = true;
+            SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
+        }
+    }
+
     private sealed class PremiumCardPanel : Panel
     {
-        public Color GradientTop { get; set; } = Color.FromArgb(40, 35, 28);
-        public Color GradientBottom { get; set; } = Color.FromArgb(20, 17, 14);
-        public Color BorderColor { get; set; } = Color.FromArgb(90, 200, 170, 110);
-        public Color HoverBorderColor { get; set; } = Color.FromArgb(240, 220, 180, 120);
+        public Color GradientTop = Color.FromArgb(40, 35, 28);
+        public Color GradientBottom = Color.FromArgb(20, 17, 14);
+        public Color BorderColor = Color.FromArgb(90, 200, 170, 110);
+        public Color HoverBorderColor = Color.FromArgb(240, 220, 180, 120);
         private bool _hovered;
 
         public PremiumCardPanel()
