@@ -23,6 +23,7 @@ internal sealed class MainForm : Form
     private readonly Button _back = new();
     private CoreWebView2Environment? _webViewEnvironment;
     private bool _browserInitialized;
+    private readonly string _backgroundImagePath = Path.Combine(AppContext.BaseDirectory, "Assets", "bg.jpg");
 
     private static readonly Color Navy = Color.FromArgb(20, 15, 12);
     private static readonly Color Blue = Color.FromArgb(190, 137, 55);
@@ -76,6 +77,7 @@ internal sealed class MainForm : Form
         Controls.Add(footer);
         Controls.Add(header);
         BuildHome();
+        Shown += async (_, _) => await LoadBackgroundImageAsync();
         _clockTimer.Tick += (_, _) => UpdateDateClock();
         _searchTimer.Tick += (_, _) => { _searchTimer.Stop(); RenderCards(); };
         _clockTimer.Start();
@@ -98,13 +100,6 @@ internal sealed class MainForm : Form
     private void BuildHome()
     {
         _home.BackColor = Color.FromArgb(10, 7, 5);
-        var bgPath = Path.Combine(AppContext.BaseDirectory, "Assets", "bg.jpg");
-        if (File.Exists(bgPath))
-        {
-            try { _home.BackgroundImage = LoadOptimizedImage(bgPath, 1920, 1080); _home.BackgroundImageLayout = ImageLayout.Stretch; }
-            catch (Exception ex) { AppDiagnostics.Write("Load background image", ex); }
-        }
-
         var layout = new TableLayoutPanel
         {
             Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 7,
@@ -276,6 +271,34 @@ internal sealed class MainForm : Form
         _home.Controls.Add(layout);
         _cardsPanel.Resize += (_, _) => ResizeExistingCards();
         RenderCards();
+    }
+
+    private async Task LoadBackgroundImageAsync()
+    {
+        if (!File.Exists(_backgroundImagePath)) return;
+
+        Image? image = null;
+        try
+        {
+            // Decode and downscale large user-supplied backgrounds away from the UI thread.
+            image = await Task.Run(() => LoadOptimizedImage(_backgroundImagePath, 1920, 1080));
+        }
+        catch (Exception ex)
+        {
+            AppDiagnostics.Write("Load background image", ex);
+            return;
+        }
+
+        if (IsDisposed || _home.IsDisposed)
+        {
+            image.Dispose();
+            return;
+        }
+
+        var previous = _home.BackgroundImage;
+        _home.BackgroundImage = image;
+        _home.BackgroundImageLayout = ImageLayout.Stretch;
+        previous?.Dispose();
     }
 
     private static Image LoadOptimizedImage(string path, int maxWidth, int maxHeight)
