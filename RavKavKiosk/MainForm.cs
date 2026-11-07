@@ -46,10 +46,10 @@ internal sealed class MainForm : Form
         BackColor = Color.White;
         Font = new Font("Segoe UI", 10);
 
-        var header = new Panel { Dock = DockStyle.Top, Height = 58, BackColor = Color.FromArgb(15, 11, 8), Padding = new Padding(24, 0, 24, 0) };
+        var header = new Panel { Dock = DockStyle.Top, Height = 68, BackColor = Color.FromArgb(18, 13, 10), Padding = new Padding(30, 0, 30, 0) };
         var brand = new Label
         {
-            Text = "ישיבת דעת אהרן", Dock = DockStyle.Right, Width = 430,
+            Text = "ישיבת דעת אהרן     ✦     המרכז הדיגיטלי", Dock = DockStyle.Right, Width = 560,
             ForeColor = Gold, Font = new Font("Segoe UI", 18, FontStyle.Bold),
             TextAlign = ContentAlignment.MiddleRight
         };
@@ -65,7 +65,7 @@ internal sealed class MainForm : Form
         header.Controls.Add(brand);
         header.Controls.Add(_back);
 
-        var footer = new Panel { Dock = DockStyle.Bottom, Height = 30, BackColor = Color.FromArgb(15, 11, 8), Padding = new Padding(12, 0, 12, 0) };
+        var footer = new Panel { Dock = DockStyle.Bottom, Height = 34, BackColor = Color.FromArgb(18, 13, 10), Padding = new Padding(12, 0, 12, 0) };
         footer.Controls.Add(_status);
 
         Controls.Add(_home);
@@ -318,50 +318,56 @@ internal sealed class MainForm : Form
         {
             _cardsPanel.Controls.Add(new Label
             {
-                Text = "לא נמצאו תוצאות\\r\\nנסה לשנות את מילות החיפוש",
-                Width = 520, Height = 112, ForeColor = Color.FromArgb(211, 193, 163),
+                Text = "לא נמצאו תוצאות\r\nנסה לשנות את מילות החיפוש",
+                Width = 520, Height = 120, ForeColor = Color.FromArgb(231, 215, 184),
                 Font = new Font("Segoe UI", 15, FontStyle.Bold),
                 TextAlign = ContentAlignment.MiddleCenter, BackColor = Color.Transparent
             });
         }
 
-        var number = 0;
+        var availableWidth = Math.Max(340, _cardsPanel.ClientSize.Width - 42);
+        var columns = availableWidth >= 1120 ? 3 : availableWidth >= 720 ? 2 : 1;
+        var cardWidth = Math.Clamp((availableWidth - (columns * 22)) / columns, 320, 470);
+
         foreach (var link in filtered)
         {
-            number++;
-            var card = new Panel
+            var categoryColor = link.Category switch
             {
-                Width = 344, Height = 166, Margin = new Padding(10),
-                BackColor = Color.FromArgb(246, 22, 17, 13),
-                BorderStyle = BorderStyle.FixedSingle, Cursor = Cursors.Hand, Tag = link,
-                Padding = new Padding(13, 9, 13, 9)
+                "tests" => Color.FromArgb(211, 164, 88),
+                "services" => Color.FromArgb(111, 173, 143),
+                _ => Color.FromArgb(160, 143, 203)
             };
+            var card = new PremiumCardPanel
+            {
+                Width = cardWidth, Height = 184, Margin = new Padding(10),
+                Cursor = Cursors.Hand, Tag = link, Padding = new Padding(17, 13, 17, 13),
+                GradientTop = Color.FromArgb(247, 36, 29, 23),
+                GradientBottom = Color.FromArgb(248, 20, 16, 13),
+                BorderColor = Color.FromArgb(115, categoryColor),
+                HoverBorderColor = Color.FromArgb(235, categoryColor)
+            };
+
             var accent = new Panel
             {
-                Dock = DockStyle.Right, Width = 5,
-                BackColor = link.Category switch
-                {
-                    "tests" => Color.FromArgb(218, 174, 93),
-                    "services" => Color.FromArgb(128, 171, 143),
-                    _ => Color.FromArgb(174, 143, 104)
-                }
+                Dock = DockStyle.Right, Width = 5, BackColor = categoryColor,
+                Margin = new Padding(0)
             };
             var icon = new Label
             {
                 Text = link.Category switch { "tests" => "✧", "services" => "▣", _ => "▤" },
-                Dock = DockStyle.Right, Width = 54,
-                ForeColor = Color.FromArgb(245, 207, 133),
-                Font = new Font("Segoe UI", 25, FontStyle.Bold),
+                Dock = DockStyle.Right, Width = 62,
+                ForeColor = Color.FromArgb(255, 224, 164),
+                Font = new Font("Segoe UI Symbol", 27, FontStyle.Bold),
                 TextAlign = ContentAlignment.MiddleCenter,
-                BackColor = Color.FromArgb(70, 116, 75, 30)
+                BackColor = Color.FromArgb(42, categoryColor)
             };
             var fav = new Button
             {
                 Text = _favorites.Contains(link.Id) ? "★" : "☆",
-                Dock = DockStyle.Left, Width = 38,
-                FlatStyle = FlatStyle.Flat, ForeColor = Color.FromArgb(255, 220, 130),
-                BackColor = Color.FromArgb(25, 20, 15, 12),
-                Font = new Font("Segoe UI", 17, FontStyle.Bold), Cursor = Cursors.Hand,
+                Dock = DockStyle.Left, Width = 42,
+                FlatStyle = FlatStyle.Flat, ForeColor = Color.FromArgb(255, 218, 125),
+                BackColor = Color.FromArgb(22, 255, 255, 255),
+                Font = new Font("Segoe UI", 18, FontStyle.Bold), Cursor = Cursors.Hand,
                 UseVisualStyleBackColor = false
             };
             fav.FlatAppearance.BorderSize = 0;
@@ -371,33 +377,33 @@ internal sealed class MainForm : Form
                 RenderCards();
             };
 
-            var content = new Panel { Dock = DockStyle.Fill, BackColor = Color.Transparent, Padding = new Padding(8, 0, 8, 0) };
+            var content = new Panel { Dock = DockStyle.Fill, BackColor = Color.Transparent, Padding = new Padding(12, 0, 10, 0) };
+            var topLine = new Panel { Dock = DockStyle.Top, Height = 3, BackColor = Color.Transparent };
             var badge = new Label
             {
-                Text = link.Badge, Dock = DockStyle.Top, Height = 24,
-                ForeColor = Color.FromArgb(225, 190, 126),
-                Font = new Font("Segoe UI", 9, FontStyle.Bold),
+                Text = "●  " + link.Badge.ToUpperInvariant(), Dock = DockStyle.Top, Height = 27,
+                ForeColor = categoryColor, Font = new Font("Segoe UI", 9, FontStyle.Bold),
                 TextAlign = ContentAlignment.MiddleRight
             };
             var title = new Label
             {
-                Text = link.Title, Dock = DockStyle.Top, Height = 39,
-                ForeColor = Color.FromArgb(255, 249, 237),
-                Font = new Font("Segoe UI", 15, FontStyle.Bold),
+                Text = link.Title, Dock = DockStyle.Top, Height = 42,
+                ForeColor = Color.FromArgb(255, 250, 239),
+                Font = new Font("Segoe UI", 17, FontStyle.Bold),
                 TextAlign = ContentAlignment.MiddleRight, Cursor = Cursors.Hand
             };
             var description = new Label
             {
-                Text = link.Subtitle, Dock = DockStyle.Top, Height = 40,
-                ForeColor = Color.FromArgb(198, 185, 166),
+                Text = link.Subtitle, Dock = DockStyle.Top, Height = 38,
+                ForeColor = Color.FromArgb(198, 188, 171),
                 Font = new Font("Segoe UI", 10),
                 TextAlign = ContentAlignment.TopRight, Cursor = Cursors.Hand
             };
             var bottom = new Label
             {
-                Text = "פתיחת השירות  ←       " + _clickCounts.GetValueOrDefault(link.Id) + " כניסות",
-                Dock = DockStyle.Bottom, Height = 26,
-                ForeColor = Color.FromArgb(218, 178, 112),
+                Text = "כניסה לשירות  ←      " + _clickCounts.GetValueOrDefault(link.Id) + " כניסות",
+                Dock = DockStyle.Bottom, Height = 30,
+                ForeColor = Color.FromArgb(245, 207, 133),
                 Font = new Font("Segoe UI", 9, FontStyle.Bold),
                 TextAlign = ContentAlignment.MiddleRight, Cursor = Cursors.Hand
             };
@@ -405,6 +411,7 @@ internal sealed class MainForm : Form
             content.Controls.Add(description);
             content.Controls.Add(title);
             content.Controls.Add(badge);
+            content.Controls.Add(topLine);
             card.Controls.Add(content);
             card.Controls.Add(icon);
             card.Controls.Add(fav);
@@ -425,6 +432,50 @@ internal sealed class MainForm : Form
             _cardsPanel.Controls.Add(card);
         }
         _cardsPanel.ResumeLayout();
+    }
+
+    private sealed class PremiumCardPanel : Panel
+    {
+        public Color GradientTop { get; set; } = Color.FromArgb(40, 35, 28);
+        public Color GradientBottom { get; set; } = Color.FromArgb(20, 17, 14);
+        public Color BorderColor { get; set; } = Color.FromArgb(90, 200, 170, 110);
+        public Color HoverBorderColor { get; set; } = Color.FromArgb(240, 220, 180, 120);
+        private bool _hovered;
+
+        public PremiumCardPanel()
+        {
+            DoubleBuffered = true;
+            SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer |
+                     ControlStyles.ResizeRedraw | ControlStyles.UserPaint, true);
+            MouseEnter += (_, _) => { _hovered = true; Invalidate(); };
+            MouseLeave += (_, _) => { _hovered = false; Invalidate(); };
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            base.OnPaint(e);
+            e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+            var rect = new Rectangle(1, 1, Width - 3, Height - 3);
+            using var path = RoundedRectangle(rect, 18);
+            using var brush = new System.Drawing.Drawing2D.LinearGradientBrush(
+                rect, _hovered ? Color.FromArgb(255, 48, 38, 28) : GradientTop,
+                _hovered ? Color.FromArgb(255, 27, 21, 16) : GradientBottom, 90f);
+            using var pen = new Pen(_hovered ? HoverBorderColor : BorderColor, _hovered ? 2.2f : 1.2f);
+            e.Graphics.FillPath(brush, path);
+            e.Graphics.DrawPath(pen, path);
+        }
+
+        private static System.Drawing.Drawing2D.GraphicsPath RoundedRectangle(Rectangle bounds, int radius)
+        {
+            var path = new System.Drawing.Drawing2D.GraphicsPath();
+            var d = radius * 2;
+            path.AddArc(bounds.X, bounds.Y, d, d, 180, 90);
+            path.AddArc(bounds.Right - d, bounds.Y, d, d, 270, 90);
+            path.AddArc(bounds.Right - d, bounds.Bottom - d, d, d, 0, 90);
+            path.AddArc(bounds.X, bounds.Bottom - d, d, d, 90, 90);
+            path.CloseFigure();
+            return path;
+        }
     }
 
     private void UpdateDateClock()
