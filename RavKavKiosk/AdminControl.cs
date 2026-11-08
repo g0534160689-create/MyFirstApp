@@ -6,12 +6,27 @@ namespace RavKavKiosk;
 
 internal sealed class AdminPolicy
 {
+    public AdminPolicy() { }
     public List<string> AllowedHosts { get; set; } = [];
     public List<RoutePolicyRule> Routes { get; set; } = [];
     public List<ElementPolicyRule> Elements { get; set; } = [];
 }
-internal sealed record RoutePolicyRule(string Host, string Path, bool Allowed);
-internal sealed record ElementPolicyRule(string Host, string Selector, bool Allowed);
+internal sealed class RoutePolicyRule
+{
+    public RoutePolicyRule() { }
+    public RoutePolicyRule(string host, string path, bool allowed) { Host = host; Path = path; Allowed = allowed; }
+    public string Host { get; set; } = "";
+    public string Path { get; set; } = "/";
+    public bool Allowed { get; set; }
+}
+internal sealed class ElementPolicyRule
+{
+    public ElementPolicyRule() { }
+    public ElementPolicyRule(string host, string selector, bool allowed) { Host = host; Selector = selector; Allowed = allowed; }
+    public string Host { get; set; } = "";
+    public string Selector { get; set; } = "";
+    public bool Allowed { get; set; }
+}
 
 internal static class AdminPolicyStore
 {
@@ -57,7 +72,13 @@ internal static class AdminPolicyStore
 internal static class AdminAuthentication
 {
     private static readonly string PasswordFile = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "RavKavKiosk", "admin-password.json");
-    private sealed record PasswordRecord(string Salt, string Hash);
+    private sealed class PasswordRecord
+    {
+        public PasswordRecord() { }
+        public PasswordRecord(string salt, string hash) { Salt = salt; Hash = hash; }
+        public string Salt { get; set; } = "";
+        public string Hash { get; set; } = "";
+    }
     public static bool Authenticate(IWin32Window owner)
     {
         if (!File.Exists(PasswordFile))
