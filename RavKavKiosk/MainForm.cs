@@ -21,7 +21,6 @@ internal sealed class MainForm : Form
     private string _activeStartUrl = "https://hopon.co.il/read";
     private string _activeServiceName = "HopOn";
     private readonly Button _back = new();
-    private readonly Button _adminButton = new() { Text = "⚙ ניהול מערכת", Width = 150, Height = 38, Dock = DockStyle.Left };
     private AdminManagerForm? _adminManager;
     private bool _elementPicking;
     private CoreWebView2Environment? _webViewEnvironment;
@@ -48,8 +47,6 @@ internal sealed class MainForm : Form
         Text = "ישיבת דעת אהרן | כל מה שצריך בלי לצאת מהישיבה";
         RightToLeft = RightToLeft.Yes;
         RightToLeftLayout = true;
-        KeyPreview = true;
-        KeyDown += (_, e) => { if (e.Control && e.Shift && e.KeyCode == Keys.A) { e.Handled = true; OpenAdminManager(); } };
         DoubleBuffered = true;
         SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
         StartPosition = FormStartPosition.CenterScreen;
@@ -75,14 +72,19 @@ internal sealed class MainForm : Form
         _back.Visible = false;
         _back.Click += (_, _) => ShowHome();
         header.Controls.Add(brand);
-        _adminButton.FlatStyle = FlatStyle.Flat;
-        _adminButton.FlatAppearance.BorderColor = Color.FromArgb(100, 150, 190);
-        _adminButton.ForeColor = Color.FromArgb(255, 224, 157);
-        _adminButton.BackColor = Navy;
-        _adminButton.Font = new Font("Segoe UI", 9, FontStyle.Bold);
-        _adminButton.Cursor = Cursors.Hand;
-        _adminButton.Click += (_, _) => OpenAdminManager();
-        _adminButton.Visible = false; // Hidden administrator entry; Ctrl+Shift+A opens authentication.
+        // Invisible administrator hotspot in the upper-left corner: no button or visible hint.
+        var adminHotspot = new Panel
+        {
+            Name = "AdminHotspot",
+            Location = new Point(0, 0),
+            Size = new Size(54, 64),
+            BackColor = Color.Transparent,
+            Cursor = Cursors.Hand,
+            TabStop = false
+        };
+        adminHotspot.Click += (_, _) => OpenAdminManager();
+        header.Controls.Add(adminHotspot);
+        adminHotspot.BringToFront();
 
         header.Controls.Add(_back);
 
