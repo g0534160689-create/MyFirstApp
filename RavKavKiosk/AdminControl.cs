@@ -32,8 +32,11 @@ internal static class AdminPolicyStore
     public static bool? RouteDecision(Uri uri)
     {
         var p = Load();
-        if (p.Routes.Any(r => r.Host.Equals(uri.Host, StringComparison.OrdinalIgnoreCase) && PathMatches(uri.AbsolutePath, r.Path) && !r.Allowed)) return false;
-        var match = p.Routes.LastOrDefault(r => r.Host.Equals(uri.Host, StringComparison.OrdinalIgnoreCase) && PathMatches(uri.AbsolutePath, r.Path));
+        var match = p.Routes
+            .Where(r => r.Host.Equals(uri.Host, StringComparison.OrdinalIgnoreCase) && PathMatches(uri.AbsolutePath, r.Path))
+            .OrderByDescending(r => r.Path.Length)
+            .ThenBy(r => r.Allowed) // deny wins when two rules have equal specificity
+            .FirstOrDefault();
         return match?.Allowed;
     }
     public static bool IsHostAllowed(string host) => Load().AllowedHosts.Contains(host, StringComparer.OrdinalIgnoreCase);
