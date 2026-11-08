@@ -218,7 +218,7 @@ internal sealed class AdminManagerForm : Form
             .Distinct().Select(index => scannedLinks[index]).ToArray();
         var targets = selectedLinks.Length > 0
             ? selectedLinks.Select(link => link.Url).ToArray()
-            : [ruleInput.Text.Trim()];
+            : new[] { ruleInput.Text.Trim() };
         var added = 0;
         foreach (var target in targets)
         {
