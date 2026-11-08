@@ -706,7 +706,7 @@ internal sealed class MainForm : Form
         if (_browser.CoreWebView2 is null) return;
         if (!Uri.TryCreate(_browser.CoreWebView2.Source, UriKind.Absolute, out var current) ||
             !_settings.IsAllowedNavigationUri(current) ||
-            IsBlockedForCurrentMode(current))
+            _settings.IsBlockedNavigationUri(current))
         {
             _status.Text = "העמוד הזה אינו זמין בעמדת הטעינה.";
             _browser.CoreWebView2.Navigate(_activeStartUrl);
@@ -846,7 +846,7 @@ internal sealed class MainForm : Form
     {
         if (!Uri.TryCreate(e.Request.Uri, UriKind.Absolute, out var target) ||
             !_settings.IsAllowedNavigationUri(target) ||
-            !IsBlockedForCurrentMode(target))
+            !_settings.IsBlockedNavigationUri(target))
             return;
 
         // A second network-level barrier: never pass a blocked HTML document to Chromium.
@@ -881,7 +881,7 @@ internal sealed class MainForm : Form
         e.Handled = true;
         if (Uri.TryCreate(e.Uri, UriKind.Absolute, out var target) &&
             _settings.IsAllowedNavigationUri(target) &&
-            !IsBlockedForCurrentMode(target))
+            !_settings.IsBlockedNavigationUri(target))
             _browser.CoreWebView2.Navigate(target.ToString());
         else
             _status.Text = "חלון חיצוני נחסם.";
