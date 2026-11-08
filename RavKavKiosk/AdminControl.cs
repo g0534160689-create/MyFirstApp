@@ -167,7 +167,7 @@ internal sealed class AdminManagerForm : Form
     private readonly AdminPolicy policy = AdminPolicyStore.Load();
     private readonly TextBox ruleInput = new() { Width = 330 };
     private readonly TextBox hostInput = new() { Width = 190 };
-    private readonly ListBox rules = new() { Dock = DockStyle.Fill, HorizontalScrollbar = true };
+    private readonly ListBox rules = new() { Dock = DockStyle.Fill, HorizontalScrollbar = true, SelectionMode = SelectionMode.MultiExtended };
     private readonly List<(string Url, string Text, bool Blocked)> scannedLinks = [];
     private readonly Label selected = new() { AutoSize = false, Height = 38, Dock = DockStyle.Top, TextAlign = ContentAlignment.MiddleRight };
     private readonly string currentUrl;
@@ -211,12 +211,26 @@ internal sealed class AdminManagerForm : Form
     }
     private void AddRoute(bool allowed)
     {
-        if (!Uri.TryCreate(ruleInput.Text.Trim(), UriKind.Absolute, out var uri) || uri.Scheme != "https")
-        { MessageBox.Show(this, "הזן כתובת HTTPS מלאה כדי לזהות את הדומיין והנתיב."); return; }
-        var path = uri.AbsolutePath;
-        policy.Routes.RemoveAll(r => r.Host.Equals(uri.Host, StringComparison.OrdinalIgnoreCase) && r.Path.Equals(path, StringComparison.OrdinalIgnoreCase));
-        policy.Routes.Add(new RoutePolicyRule(uri.Host, path, allowed));
+        var offset = policy.Routes.Count + policy.Elements.Count + policy.AllowedHosts.Count + 7 + AppSettings.Load().BlockedPaths.Count;
+        var selectedLinks = rules.SelectedIndices.Cast<int>()
+            .Select(index => index - offset)
+            .Where(index => index >= 0 && index < scannedLinks.Count)
+            .Distinct().Select(index => scannedLinks[index]).ToArray();
+        var targets = selectedLinks.Length > 0
+            ? selectedLinks.Select(link => link.Url).ToArray()
+            : [ruleInput.Text.Trim()];
+        var added = 0;
+        foreach (var target in targets)
+        {
+            if (!Uri.TryCreate(target, UriKind.Absolute, out var uri) || uri.Scheme != Uri.UriSchemeHttps) continue;
+            var path = uri.AbsolutePath;
+            policy.Routes.RemoveAll(r => r.Host.Equals(uri.Host, StringComparison.OrdinalIgnoreCase) && r.Path.Equals(path, StringComparison.OrdinalIgnoreCase));
+            policy.Routes.Add(new RoutePolicyRule(uri.Host, path, allowed));
+            added++;
+        }
+        if (added == 0) { MessageBox.Show(this, "בחר קישור מהרשימה או הזן כתובת HTTPS מלאה."); return; }
         AdminPolicyStore.Save(policy); RefreshRules(); RulesChanged?.Invoke();
+        selected.Text = allowed ? $"נפתחו {added} נתיבים שנבחרו." : $"נחסמו {added} נתיבים שנבחרו.";
     }
     private void AddHost()
     {
@@ -277,8 +291,14 @@ internal sealed class AdminManagerForm : Form
             rules.Items.Add($"דומיין מורשה מובנה | {h}");
         foreach (var path in AppSettings.Load().BlockedPaths)
             rules.Items.Add($"חסום כברירת מחדל | https://hopon.co.il{path}");
-        foreach (var link in scannedLinks)
-            rules.Items.Add($"{(link.Blocked ? "חסום בעמוד" : "פתוח בעמוד")} | {link.Text} | {link.Url}");
+        for (var i = 0; i < scannedLinks.Count; i++)
+        {
+            var link = scannedLinks[i];
+            var blocked = !Uri.TryCreate(link.Url, UriKind.Absolute, out var linkUri) ||
+                !AppSettings.Load().IsAllowedNavigationUri(linkUri) || AppSettings.Load().IsBlockedNavigationUri(linkUri);
+            scannedLinks[i] = (link.Url, link.Text, blocked);
+            rules.Items.Add($"{(blocked ? "חסום בעמוד" : "פתוח בעמוד")} | {link.Text} | {link.Url}");
+        }
         rules.SelectedIndexChanged -= OnRuleSelectionChanged;
         rules.SelectedIndexChanged += OnRuleSelectionChanged;
     }
