@@ -168,9 +168,11 @@ internal sealed class AdminManagerForm : Form
     private readonly TextBox ruleInput = new() { Width = 330 };
     private readonly TextBox hostInput = new() { Width = 190 };
     private readonly ListBox rules = new() { Dock = DockStyle.Fill, HorizontalScrollbar = true };
+    private readonly List<(string Url, string Text, bool Blocked)> scannedLinks = [];
     private readonly Label selected = new() { AutoSize = false, Height = 38, Dock = DockStyle.Top, TextAlign = ContentAlignment.MiddleRight };
     private readonly string currentUrl;
     public event Action? PickElementRequested;
+    public event Action? ScanLinksRequested;
     public event Action? RulesChanged;
     public AdminManagerForm(string url)
     {
@@ -191,7 +193,8 @@ internal sealed class AdminManagerForm : Form
         ruleInput.Text = currentUrl; route.Controls.Add(ruleInput);
         var block = new Button { Text = "חסום נתיב", Width = 100 }; block.Click += (_, _) => AddRoute(false);
         var allow = new Button { Text = "אפשר נתיב", Width = 100 }; allow.Click += (_, _) => AddRoute(true);
-        route.Controls.Add(block); route.Controls.Add(allow); root.Controls.Add(route, 0, 1);
+        var scan = new Button { Text = "סרוק קישורים בעמוד", Width = 150 }; scan.Click += (_, _) => ScanLinksRequested?.Invoke();
+        route.Controls.Add(block); route.Controls.Add(allow); route.Controls.Add(scan); root.Controls.Add(route, 0, 1);
         var host = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft };
         host.Controls.Add(new Label { Text = "דומיין מורשה:", AutoSize = true, Padding = new Padding(0, 8, 0, 0) });
         host.Controls.Add(hostInput);
@@ -227,6 +230,14 @@ internal sealed class AdminManagerForm : Form
         var details = string.IsNullOrWhiteSpace(href) ? "" : " | קישור: " + href;
         var caption = string.IsNullOrWhiteSpace(label) ? "" : " | " + label;
         selected.Text = $"רכיב שנבחר ({tag}){caption}{details}: {selector}";
+        Show(); Activate();
+    }
+    public void ReceiveScannedLinks(IEnumerable<(string Url, string Text, bool Blocked)> links)
+    {
+        scannedLinks.Clear();
+        scannedLinks.AddRange(links.Take(300));
+        RefreshRules();
+        selected.Text = $"נסרקו {scannedLinks.Count} קישורים בעמוד. בחר קישור מהרשימה כדי לטעון אותו לשדה הנתיב, ואז לחץ אפשר או חסום.";
         Show(); Activate();
     }
     private void SaveSelectedElement(bool allowed)
@@ -266,5 +277,20 @@ internal sealed class AdminManagerForm : Form
             rules.Items.Add($"דומיין מורשה מובנה | {h}");
         foreach (var path in AppSettings.Load().BlockedPaths)
             rules.Items.Add($"חסום כברירת מחדל | https://hopon.co.il{path}");
+        foreach (var link in scannedLinks)
+            rules.Items.Add($"{(link.Blocked ? "חסום בעמוד" : "פתוח בעמוד")} | {link.Text} | {link.Url}");
+        rules.SelectedIndexChanged -= OnRuleSelectionChanged;
+        rules.SelectedIndexChanged += OnRuleSelectionChanged;
+    }
+    private void OnRuleSelectionChanged(object? sender, EventArgs e)
+    {
+        var index = rules.SelectedIndex;
+        var offset = policy.Routes.Count + policy.Elements.Count + policy.AllowedHosts.Count + 7 + AppSettings.Load().BlockedPaths.Count;
+        var scannedIndex = index - offset;
+        if (scannedIndex >= 0 && scannedIndex < scannedLinks.Count)
+        {
+            ruleInput.Text = scannedLinks[scannedIndex].Url;
+            selected.Text = $"קישור שזוהה: {(scannedLinks[scannedIndex].Blocked ? "חסום" : "פתוח")} — {scannedLinks[scannedIndex].Url}";
+        }
     }
 }
