@@ -810,7 +810,6 @@ internal sealed class MainForm : Form
 
     private void OnWebMessageReceived(object? sender, CoreWebView2WebMessageReceivedEventArgs e)
     {
-        if (!_elementPicking) return;
         try
         {
             using var doc = JsonDocument.Parse(e.WebMessageAsJson);
@@ -829,7 +828,7 @@ internal sealed class MainForm : Form
                 _adminManager?.ReceiveScannedLinks(links);
                 return;
             }
-            if (messageType != "element-picked") return;
+            if (messageType != "element-picked" || !_elementPicking) return;
             var selector = doc.RootElement.GetProperty("selector").GetString();
             if (string.IsNullOrWhiteSpace(selector) || selector.Length > 500 ||
                 !System.Text.RegularExpressions.Regex.IsMatch(selector, @"^[A-Za-z0-9#._\\: >()\-]+$")) return;
