@@ -9,6 +9,9 @@ internal sealed class AppSettings
     public string RavKavStartUrl { get; set; } = "https://ravkavonline.co.il/he/store/connect";
     public string RavKavHost { get; set; } = "ravkavonline.co.il";
     public string RavKavAllowedPath { get; set; } = "/he/store/connect";
+    public string NedarimStartUrl { get; set; } = "https://www.matara.pro/nedarimplus/";
+    public string NedarimHost { get; set; } = "www.matara.pro";
+    public List<string> NedarimAllowedPaths { get; set; } = ["/nedarimplus", "/nedarimplus/online"];
     public List<string> PortalAllowedHosts { get; set; } =
     [
         "www.matara.pro",
@@ -57,15 +60,23 @@ internal sealed class AppSettings
         uri.IsAbsoluteUri &&
         uri.Host.Equals(AllowedHost, StringComparison.OrdinalIgnoreCase);
 
+    public bool IsNedarimPlusUri(Uri uri) => uri.IsAbsoluteUri && (uri.Host.Equals(NedarimHost, StringComparison.OrdinalIgnoreCase) || uri.Host.Equals("matara.pro", StringComparison.OrdinalIgnoreCase));
+
     public bool IsRavKavUri(Uri uri) =>
         uri.IsAbsoluteUri &&
         uri.Host.Equals(RavKavHost, StringComparison.OrdinalIgnoreCase);
 
     // For Rav-Kav Online, only /he/store/connect is a permitted top-level route.
     // For HopOn, retain the existing blocked-route list and its nested/encoded checks.
-    public bool IsBlockedNavigationUri(Uri uri)
+    public bool IsBlockedNavigationUri(Uri uri, bool strictNedarimPlus = false)
     {
         if (!IsSecureHttpUri(uri)) return true;
+
+        if (strictNedarimPlus && IsNedarimPlusUri(uri))
+        {
+            var path = NormalizePath(uri.AbsolutePath);
+            return path is null || !(NedarimAllowedPaths ?? []).Any(allowed => path.Equals(NormalizePath(allowed), StringComparison.OrdinalIgnoreCase));
+        }
 
         if (IsRavKavUri(uri))
         {
