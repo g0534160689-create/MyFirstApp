@@ -752,6 +752,7 @@ internal sealed class MainForm : Form
             ? current.ToString() : "https://hopon.co.il/read";
         _adminManager = new AdminManagerForm(currentUrl);
         _adminManager.PickElementRequested += StartElementPicker;
+        _adminManager.ScanLinksRequested += ScanCurrentPageLinks;
         _adminManager.RulesChanged += () => _ = ApplyElementRulesAsync();
         _adminManager.FormClosed += (_, _) => _adminManager = null;
         _adminManager.Show(this);
@@ -813,7 +814,22 @@ internal sealed class MainForm : Form
         try
         {
             using var doc = JsonDocument.Parse(e.WebMessageAsJson);
-            if (doc.RootElement.GetProperty("type").GetString() != "element-picked") return;
+            var messageType = doc.RootElement.GetProperty("type").GetString();
+            if (messageType == "link-scan")
+            {
+                var links = new List<(string Url, string Text, bool Blocked)>();
+                foreach (var item in doc.RootElement.GetProperty("links").EnumerateArray())
+                {
+                    var urlText = item.GetProperty("url").GetString() ?? "";
+                    if (!Uri.TryCreate(urlText, UriKind.Absolute, out var linkUri) || linkUri.Scheme != Uri.UriSchemeHttps) continue;
+                    var labelText = item.TryGetProperty("text", out var textValue) ? textValue.GetString() ?? "" : "";
+                    var blocked = !_settings.IsAllowedNavigationUri(linkUri) || _settings.IsBlockedNavigationUri(linkUri);
+                    links.Add((urlText, string.IsNullOrWhiteSpace(labelText) ? "(ללא כותרת)" : labelText, blocked));
+                }
+                _adminManager?.ReceiveScannedLinks(links);
+                return;
+            }
+            if (messageType != "element-picked") return;
             var selector = doc.RootElement.GetProperty("selector").GetString();
             if (string.IsNullOrWhiteSpace(selector) || selector.Length > 500 ||
                 !System.Text.RegularExpressions.Regex.IsMatch(selector, @"^[A-Za-z0-9#._\\: >()\-]+$")) return;
@@ -823,6 +839,27 @@ internal sealed class MainForm : Form
             _elementPicking = false; _adminManager?.ReceivePickedSelector(selector, tag ?? "", href ?? "", label ?? "");
         }
         catch (Exception ex) { AppDiagnostics.Write("Read selected page element", ex); }
+    }
+
+    private async void ScanCurrentPageLinks()
+    {
+        if (!_browserInitialized || _browser.CoreWebView2 is null)
+        {
+            MessageBox.Show(this, "אין עמוד פתוח לסריקה.");
+            return;
+        }
+        const string script = """
+        (() => {
+          const seen = new Set();
+          const links = [...document.querySelectorAll("a[href]")].map(a => ({
+            url: a.href,
+            text: (a.innerText || a.getAttribute("aria-label") || a.title || "").trim().replace(/\\s+/g, " ").slice(0,100)
+          })).filter(x => x.url.startsWith("https://") && !seen.has(x.url) && seen.add(x.url)).slice(0,300);
+          chrome.webview.postMessage({type:"link-scan", links});
+        })();
+        """;
+        try { await _browser.CoreWebView2.ExecuteScriptAsync(script); }
+        catch (Exception ex) { AppDiagnostics.Write("Scan page links", ex); MessageBox.Show(this, "סריקת הקישורים נכשלה."); }
     }
 
     private async Task ApplyElementRulesAsync()
