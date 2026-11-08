@@ -24,6 +24,9 @@ internal sealed class MainForm : Form
     private CoreWebView2Environment? _webViewEnvironment;
     private bool _browserInitialized;
     private readonly string _backgroundImagePath = Path.Combine(AppContext.BaseDirectory, "Assets", "bg.jpg");
+    private BufferedPanel? _heroPanel;
+    private PictureBox? _daatLogoBox;
+    private PictureBox? _partnerLogoBox;
 
     private static readonly Color Navy = Color.FromArgb(14, 27, 48);
     private static readonly Color Blue = Color.FromArgb(49, 91, 133);
@@ -77,7 +80,7 @@ internal sealed class MainForm : Form
         Controls.Add(footer);
         Controls.Add(header);
         BuildHome();
-        Shown += async (_, _) => await LoadBackgroundImageAsync();
+        Shown += async (_, _) => await LoadVisualAssetsAsync();
         _clockTimer.Tick += (_, _) => UpdateDateClock();
         _searchTimer.Tick += (_, _) => { _searchTimer.Stop(); RenderCards(); };
         _clockTimer.Start();
@@ -115,22 +118,11 @@ internal sealed class MainForm : Form
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 104));
 
         var meta = new BufferedPanel { Dock = DockStyle.Fill, BackColor = Color.FromArgb(9, 18, 34), Padding = new Padding(2) };
-        var partnerPath = Path.Combine(AppContext.BaseDirectory, "Assets", "otzar-logo.png");
-        if (File.Exists(partnerPath))
-        {
-            try
-            {
-                var picture = new PictureBox { Dock = DockStyle.Right, Width = 176, SizeMode = PictureBoxSizeMode.Zoom, BackColor = Color.FromArgb(245, 255, 255, 255), Padding = new Padding(8) };
-                picture.Image = LoadOptimizedImage(partnerPath, 480, 260);
-                meta.Controls.Add(picture);
-            }
-            catch (Exception ex)
-            {
-                AppDiagnostics.Write("Load partner logo", ex);
-                meta.Controls.Add(CreatePartnerFallback());
-            }
-        }
-        else meta.Controls.Add(CreatePartnerFallback());
+        var partnerHost = new BufferedPanel { Dock = DockStyle.Right, Width = 176, BackColor = Color.White, Padding = new Padding(8) };
+        partnerHost.Controls.Add(new Label { Text = "אוצר החכמה", Dock = DockStyle.Fill, ForeColor = Color.FromArgb(70, 48, 20), Font = new Font("Segoe UI", 13, FontStyle.Bold), TextAlign = ContentAlignment.MiddleCenter, BackColor = Color.White });
+        _partnerLogoBox = new PictureBox { Dock = DockStyle.Fill, SizeMode = PictureBoxSizeMode.Zoom, BackColor = Color.White, Visible = false };
+        partnerHost.Controls.Add(_partnerLogoBox);
+        meta.Controls.Add(partnerHost);
 
         _dateClock.Dock = DockStyle.Left;
         _dateClock.Width = 330;
@@ -141,6 +133,7 @@ internal sealed class MainForm : Form
         meta.Controls.Add(_dateClock);
 
         var hero = new BufferedPanel { Dock = DockStyle.Fill, BackColor = Color.FromArgb(19, 39, 66), Padding = new Padding(28, 16, 28, 16) };
+        _heroPanel = hero;
         var heroLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1, BackColor = Color.FromArgb(19, 39, 66) };
         heroLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         heroLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 170));
@@ -168,23 +161,8 @@ internal sealed class MainForm : Form
         }, 0, 2);
 
         var logo = new PictureBox { Dock = DockStyle.Fill, SizeMode = PictureBoxSizeMode.Zoom, BackColor = Color.FromArgb(19, 39, 66), Padding = new Padding(10) };
-        var logoPath = Path.Combine(AppContext.BaseDirectory, "Assets", "daat-logo.png");
-        if (File.Exists(logoPath))
-        {
-            try { logo.Image = LoadOptimizedImage(logoPath, 640, 640); }
-            catch (Exception ex) { AppDiagnostics.Write("Load daat logo", ex); }
-        }
-        else
-        {
-            try
-            {
-                using var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("RavKavKiosk.Assets.daat-logo.png");
-                if (stream is not null) using (var image = Image.FromStream(stream)) logo.Image = new Bitmap(image);
-            }
-            catch (Exception ex) { AppDiagnostics.Write("Load embedded daat logo", ex); }
-        }
-        if (logo.Image is null)
-            logo.Controls.Add(new Label { Text = "דעת אהרן", Dock = DockStyle.Fill, ForeColor = Gold, Font = new Font("Segoe UI", 18, FontStyle.Bold), TextAlign = ContentAlignment.MiddleCenter, BackColor = Color.Transparent });
+        logo.Controls.Add(new Label { Text = "דעת אהרן", Dock = DockStyle.Fill, ForeColor = Gold, Font = new Font("Segoe UI", 18, FontStyle.Bold), TextAlign = ContentAlignment.MiddleCenter, BackColor = Color.FromArgb(19, 39, 66) });
+        _daatLogoBox = logo;
         heroLayout.Controls.Add(heroText, 0, 0);
         heroLayout.Controls.Add(logo, 1, 0);
         hero.Controls.Add(heroLayout);
@@ -273,38 +251,65 @@ internal sealed class MainForm : Form
         RenderCards();
     }
 
-    private async Task LoadBackgroundImageAsync()
+    private async Task LoadVisualAssetsAsync()
     {
-        if (!File.Exists(_backgroundImagePath)) return;
+        var jobs = new List<Task<(string kind, Image? image)>>();
+        if (File.Exists(_backgroundImagePath))
+            jobs.Add(Task.Run(() => ("background", LoadOptimizedImage(_backgroundImagePath, 1920, 1080))));
+        var partnerPath = Path.Combine(AppContext.BaseDirectory, "Assets", "otzar-logo.png");
+        if (File.Exists(partnerPath))
+            jobs.Add(Task.Run(() => ("partner", LoadOptimizedImage(partnerPath, 480, 260))));
+        var daatPath = Path.Combine(AppContext.BaseDirectory, "Assets", "daat-logo.png");
+        if (File.Exists(daatPath))
+            jobs.Add(Task.Run(() => ("daat", LoadOptimizedImage(daatPath, 640, 640))));
+        else
+            jobs.Add(Task.Run(() => ("daat", LoadEmbeddedOptimizedImage("RavKavKiosk.Assets.daat-logo.png", 640, 640))));
 
-        Image? image = null;
-        try
+        foreach (var job in jobs)
         {
-            // Decode and downscale large user-supplied backgrounds away from the UI thread.
-            image = await Task.Run(() => LoadOptimizedImage(_backgroundImagePath, 1920, 1080));
-        }
-        catch (Exception ex)
-        {
-            AppDiagnostics.Write("Load background image", ex);
-            return;
-        }
+            try
+            {
+                var (kind, image) = await job;
+                if (image is null) continue;
+                if (IsDisposed || _home.IsDisposed) { image.Dispose(); continue; }
 
-        if (IsDisposed || _home.IsDisposed)
-        {
-            image.Dispose();
-            return;
+                PictureBox? target = kind switch { "partner" => _partnerLogoBox, "daat" => _daatLogoBox, _ => null };
+                if (kind == "background" && _heroPanel is not null)
+                {
+                    var previous = _heroPanel.BackgroundImage;
+                    _heroPanel.BackgroundImage = image;
+                    _heroPanel.BackgroundImageLayout = ImageLayout.Stretch;
+                    previous?.Dispose();
+                }
+                else if (target is not null)
+                {
+                    var previous = target.Image;
+                    target.Image = image;
+                    target.Visible = true;
+                    previous?.Dispose();
+                }
+            }
+            catch (Exception ex) { AppDiagnostics.Write("Load visual asset", ex); }
         }
+    }
 
-        var previous = _home.BackgroundImage;
-        _home.BackgroundImage = image;
-        _home.BackgroundImageLayout = ImageLayout.Stretch;
-        previous?.Dispose();
+    private static Image LoadEmbeddedOptimizedImage(string resourceName, int maxWidth, int maxHeight)
+    {
+        using var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(resourceName)
+            ?? throw new FileNotFoundException("Embedded image resource not found.", resourceName);
+        using var buffer = new MemoryStream();
+        stream.CopyTo(buffer);
+        return CreateOptimizedImage(buffer.ToArray(), maxWidth, maxHeight);
     }
 
     private static Image LoadOptimizedImage(string path, int maxWidth, int maxHeight)
     {
         // Read bytes first so the user's file is never kept locked by the running app.
-        var bytes = File.ReadAllBytes(path);
+        return CreateOptimizedImage(File.ReadAllBytes(path), maxWidth, maxHeight);
+    }
+
+    private static Image CreateOptimizedImage(byte[] bytes, int maxWidth, int maxHeight)
+    {
         using var stream = new MemoryStream(bytes, writable: false);
         using var source = Image.FromStream(stream, useEmbeddedColorManagement: false, validateImageData: true);
         var scale = Math.Min(1d, Math.Min((double)maxWidth / source.Width, (double)maxHeight / source.Height));
