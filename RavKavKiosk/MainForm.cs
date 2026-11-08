@@ -119,7 +119,7 @@ internal sealed class MainForm : Form
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 116));
 
-        var meta = new BufferedPanel { Dock = DockStyle.Fill, BackColor = Color.FromArgb(9, 18, 34), Padding = new Padding(2) };
+        var meta = new BufferedPanel { Dock = DockStyle.Fill, BackColor = Color.Transparent, Padding = new Padding(2) };
         var partnerHost = new BufferedPanel { Dock = DockStyle.Right, Width = 176, BackColor = Color.White, Padding = new Padding(8) };
         partnerHost.Controls.Add(new Label { Text = "אוצר החכמה", Dock = DockStyle.Fill, ForeColor = Color.FromArgb(70, 48, 20), Font = new Font("Segoe UI", 13, FontStyle.Bold), TextAlign = ContentAlignment.MiddleCenter, BackColor = Color.White });
         _partnerLogoBox = new PictureBox { Dock = DockStyle.Fill, SizeMode = PictureBoxSizeMode.Zoom, BackColor = Color.White, Visible = false };
@@ -182,7 +182,7 @@ internal sealed class MainForm : Form
             Text = "המרכז הדיגיטלי של הישיבה     |     כל השירותים והקישורים במקום אחד",
             Dock = DockStyle.Fill, ForeColor = Color.FromArgb(229, 201, 155),
             Font = new Font("Segoe UI", 11, FontStyle.Bold), TextAlign = ContentAlignment.MiddleCenter,
-            BackColor = Color.FromArgb(9, 18, 34)
+            BackColor = Color.Transparent
         };
 
         var searchHost = new Panel
