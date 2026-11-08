@@ -54,12 +54,12 @@ internal sealed class MainForm : Form
         BackColor = Color.FromArgb(9, 18, 34);
         Font = new Font("Segoe UI", 10);
 
-        var header = new BufferedPanel { Dock = DockStyle.Top, Height = 76, BackColor = Color.FromArgb(12, 24, 43), Padding = new Padding(30, 0, 30, 0) };
+        var header = new BufferedPanel { Dock = DockStyle.Top, Height = 76, BackColor = Color.FromArgb(205, 12, 24, 43), Padding = new Padding(30, 0, 30, 0) };
         var brand = new Label
         {
             Text = "ישיבת דעת אהרן     ✦     המרכז הדיגיטלי", Dock = DockStyle.Right, Width = 560,
             ForeColor = Gold, Font = new Font("Segoe UI", 18, FontStyle.Bold),
-            TextAlign = ContentAlignment.MiddleRight, BackColor = Color.FromArgb(19, 39, 66)
+            TextAlign = ContentAlignment.MiddleRight, BackColor = Color.FromArgb(205, 19, 39, 66)
         };
         _back.Text = "חזרה למסך הראשי";
         _back.Dock = DockStyle.Left;
@@ -73,7 +73,7 @@ internal sealed class MainForm : Form
         header.Controls.Add(brand);
         header.Controls.Add(_back);
 
-        var footer = new BufferedPanel { Dock = DockStyle.Bottom, Height = 38, BackColor = Color.FromArgb(12, 24, 43), Padding = new Padding(12, 0, 12, 0) };
+        var footer = new BufferedPanel { Dock = DockStyle.Bottom, Height = 38, BackColor = Color.FromArgb(205, 12, 24, 43), Padding = new Padding(12, 0, 12, 0) };
         footer.Controls.Add(_status);
 
         Controls.Add(_home);
@@ -103,12 +103,12 @@ internal sealed class MainForm : Form
 
     private void BuildHome()
     {
-        _home.BackColor = Color.FromArgb(9, 18, 34);
+        _home.BackColor = Color.Transparent;
         var layout = new TableLayoutPanel
         {
             Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 8,
             Padding = new Padding(42, 22, 42, 22),
-            BackColor = Color.FromArgb(9, 18, 34)
+            BackColor = Color.Transparent
         };
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 56));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 188));
@@ -724,7 +724,7 @@ internal sealed class MainForm : Form
         if (_browser.CoreWebView2 is null) return;
         if (!Uri.TryCreate(_browser.CoreWebView2.Source, UriKind.Absolute, out var current) ||
             !_settings.IsAllowedNavigationUri(current) ||
-            _settings.IsBlockedNavigationUri(current))
+            IsBlockedForCurrentMode(current))
         {
             _status.Text = "העמוד הזה אינו זמין בעמדת הטעינה.";
             _browser.CoreWebView2.Navigate(_activeStartUrl);
@@ -888,7 +888,7 @@ internal sealed class MainForm : Form
     {
         if (!Uri.TryCreate(e.Uri, UriKind.Absolute, out var target) ||
             !_settings.IsAllowedNavigationUri(target) ||
-            _settings.IsBlockedNavigationUri(target))
+            IsBlockedForCurrentMode(target))
         {
             e.Cancel = true;
             _status.Text = "העמוד המבוקש חסום בעמדה זו.";
@@ -900,7 +900,7 @@ internal sealed class MainForm : Form
         e.Handled = true;
         if (Uri.TryCreate(e.Uri, UriKind.Absolute, out var target) &&
             _settings.IsAllowedNavigationUri(target) &&
-            !_settings.IsBlockedNavigationUri(target))
+            !IsBlockedForCurrentMode(target))
             _browser.CoreWebView2.Navigate(target.ToString());
         else
             _status.Text = "חלון חיצוני נחסם.";
