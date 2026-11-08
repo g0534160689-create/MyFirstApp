@@ -18,7 +18,6 @@ internal sealed class MainForm : Form
     };
     private readonly Button _start = new();
     private readonly Button _ravKavStart = new();
-    private readonly Button _nedarimStart = new();
     private string _activeStartUrl = "https://hopon.co.il/read";
     private string _activeServiceName = "HopOn";
     private readonly Button _back = new();
@@ -106,13 +105,12 @@ internal sealed class MainForm : Form
         _home.BackColor = Color.Transparent;
         var layout = new TableLayoutPanel
         {
-            Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 8,
+            Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 7,
             Padding = new Padding(42, 22, 42, 22),
             BackColor = Color.Transparent
         };
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 56));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 188));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 66));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 62));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
@@ -168,14 +166,6 @@ internal sealed class MainForm : Form
         heroLayout.Controls.Add(heroText, 0, 0);
         heroLayout.Controls.Add(logo, 1, 0);
         hero.Controls.Add(heroLayout);
-
-        var nedarimPanel = new BufferedPanel { Dock = DockStyle.Fill, BackColor = Color.Transparent };
-        _nedarimStart.Text = "✦   כניסה לקופת נדרים פלוס   ✦";
-        StyleServiceButton(_nedarimStart, Color.FromArgb(128, 91, 37));
-        _nedarimStart.Width = 420; _nedarimStart.Height = 50; _nedarimStart.Anchor = AnchorStyles.None;
-        _nedarimStart.Click += async (_, _) => await OpenOfficialServiceAsync(_settings.NedarimStartUrl, "נדרים פלוס");
-        nedarimPanel.Controls.Add(_nedarimStart);
-        nedarimPanel.Resize += (_, _) => _nedarimStart.Location = new Point((nedarimPanel.ClientSize.Width - _nedarimStart.Width) / 2, (nedarimPanel.ClientSize.Height - _nedarimStart.Height) / 2);
 
         var sectionTitle = new Label
         {
@@ -251,12 +241,11 @@ internal sealed class MainForm : Form
 
         layout.Controls.Add(meta, 0, 0);
         layout.Controls.Add(hero, 0, 1);
-        layout.Controls.Add(nedarimPanel, 0, 2);
-        layout.Controls.Add(sectionTitle, 0, 3);
-        layout.Controls.Add(searchHost, 0, 4);
-        layout.Controls.Add(filters, 0, 5);
-        layout.Controls.Add(_cardsPanel, 0, 6);
-        layout.Controls.Add(ravPanel, 0, 7);
+        layout.Controls.Add(sectionTitle, 0, 2);
+        layout.Controls.Add(searchHost, 0, 3);
+        layout.Controls.Add(filters, 0, 4);
+        layout.Controls.Add(_cardsPanel, 0, 5);
+        layout.Controls.Add(ravPanel, 0, 6);
         _home.Controls.Add(layout);
         _cardsPanel.Resize += (_, _) => ResizeExistingCards();
         RenderCards();
@@ -645,10 +634,6 @@ internal sealed class MainForm : Form
                     CoreWebView2WebResourceContext.Document,
                     CoreWebView2WebResourceRequestSourceKinds.All);
                 core.AddWebResourceRequestedFilter(
-                    "https://www.matara.pro/*", CoreWebView2WebResourceContext.Document, CoreWebView2WebResourceRequestSourceKinds.All);
-                core.AddWebResourceRequestedFilter(
-                    "https://matara.pro/*", CoreWebView2WebResourceContext.Document, CoreWebView2WebResourceRequestSourceKinds.All);
-                core.AddWebResourceRequestedFilter(
                     "https://ravkavonline.co.il/*",
                     CoreWebView2WebResourceContext.Document,
                     CoreWebView2WebResourceRequestSourceKinds.All);
@@ -656,7 +641,6 @@ internal sealed class MainForm : Form
 
                 await core.AddScriptToExecuteOnDocumentCreatedAsync(BuildRouteGuardScript(_settings.StartUrl));
                 await core.AddScriptToExecuteOnDocumentCreatedAsync(BuildRouteGuardScript(_settings.RavKavStartUrl));
-                await core.AddScriptToExecuteOnDocumentCreatedAsync(BuildRouteGuardScript(_settings.NedarimStartUrl));
                 core.DownloadStarting += (_, args) => args.Cancel = true;
                 core.LaunchingExternalUriScheme += OnLaunchingExternalUriScheme;
                 core.PermissionRequested += (_, args) => args.State = CoreWebView2PermissionState.Deny;
@@ -666,7 +650,7 @@ internal sealed class MainForm : Form
                     if (_browser.CoreWebView2 is not null &&
                         Uri.TryCreate(_browser.CoreWebView2.Source, UriKind.Absolute, out var current) &&
                         _settings.IsAllowedNavigationUri(current) &&
-                        !IsBlockedForCurrentMode(current))
+                        !_settings.IsBlockedNavigationUri(current))
                         _status.Text = $"שירות {_activeServiceName}";
                 };
                 core.NavigationCompleted += (_, args) =>
@@ -691,7 +675,7 @@ internal sealed class MainForm : Form
 
             if (!Uri.TryCreate(startUrl, UriKind.Absolute, out var start) ||
                 !_settings.IsAllowedNavigationUri(start) ||
-                IsBlockedForCurrentMode(start))
+                _settings.IsBlockedNavigationUri(start))
                 throw new InvalidOperationException("כתובת השירות אינה מאושרת בהגדרות.");
 
             _browser.CoreWebView2.Navigate(start.ToString());
@@ -717,8 +701,6 @@ internal sealed class MainForm : Form
         }
     }
 
-    private bool IsBlockedForCurrentMode(Uri uri) => _settings.IsBlockedNavigationUri(uri, strictNedarimPlus: _activeServiceName == "נדרים פלוס");
-
     private void EnforceCurrentPage()
     {
         if (_browser.CoreWebView2 is null) return;
@@ -736,10 +718,9 @@ internal sealed class MainForm : Form
         var serviceUri = new Uri(serviceStartUrl);
         var origin = serviceUri.GetLeftPart(UriPartial.Authority);
         var originJson = JsonSerializer.Serialize(origin);
-        var strictPath = _settings.IsRavKavUri(serviceUri) || _settings.IsNedarimPlusUri(serviceUri);
+        var strictPath = _settings.IsRavKavUri(serviceUri);
         var strictPathJson = JsonSerializer.Serialize(strictPath);
-        var allowedPaths = _settings.IsRavKavUri(serviceUri) ? new[] { _settings.RavKavAllowedPath } : (_settings.IsNedarimPlusUri(serviceUri) ? _settings.NedarimAllowedPaths : Array.Empty<string>());
-        var allowedPathsJson = JsonSerializer.Serialize(allowedPaths);
+        var allowedPathJson = JsonSerializer.Serialize(_settings.RavKavAllowedPath);
         var blockedPathsJson = JsonSerializer.Serialize(_settings.BlockedPaths);
 
         var script = """
@@ -748,7 +729,7 @@ internal sealed class MainForm : Form
             if (window.top !== window) return;
             const allowedOrigin = __ALLOWED_ORIGIN_JSON__;
             const strictPath = __STRICT_PATH__;
-            const allowedPaths = __ALLOWED_PATHS_JSON__.map(p => String(p).toLowerCase().replace(/\\/+$/g, "") || "/");
+            const allowedPath = __ALLOWED_PATH_JSON__;
             const blockedRoots = __BLOCKED_PATHS_JSON__.map(p =>
                 String(p).replace(/\\/g, "/").replace(/\/+$/g, "").toLowerCase()
             );
@@ -785,7 +766,7 @@ internal sealed class MainForm : Form
                 const path = normalizedPath(value);
                 if (path === "__BLOCK_INVALID__") return true;
                 if (path === null) return false;
-                if (strictPath) return !allowedPaths.includes(path);
+                if (strictPath) return path !== allowedPath.toLowerCase();
                 return blockedRoots.some(root =>
                     path === root ||
                     path.startsWith(root + "/") ||
@@ -803,7 +784,7 @@ internal sealed class MainForm : Form
             for (const method of ["pushState", "replaceState"]) {
                 const original = history[method];
                 history[method] = function(state, title, url) {
-                    if (url != null && isBlocked(url)) {
+                    if (!strictPath && url != null && isBlocked(url)) {
                         notifyBlocked();
                         return;
                     }
@@ -825,7 +806,7 @@ internal sealed class MainForm : Form
 
             document.addEventListener("submit", event => {
                 const form = event.target;
-                if (form instanceof HTMLFormElement && isBlocked(form.action)) {
+                if (!strictPath && form instanceof HTMLFormElement && isBlocked(form.action)) {
                     event.preventDefault();
                     event.stopImmediatePropagation();
                     event.stopPropagation();
@@ -835,7 +816,7 @@ internal sealed class MainForm : Form
 
             // Defensive fallback for a blocked entry already present in history.
             window.addEventListener("popstate", () => {
-                if (isBlocked(location.href)) {
+                if (!strictPath && isBlocked(location.href)) {
                     history.forward();
                     notifyBlocked();
                 }
@@ -846,7 +827,7 @@ internal sealed class MainForm : Form
         return script
             .Replace("__ALLOWED_ORIGIN_JSON__", originJson, StringComparison.Ordinal)
             .Replace("__STRICT_PATH__", strictPathJson, StringComparison.Ordinal)
-            .Replace("__ALLOWED_PATHS_JSON__", allowedPathsJson, StringComparison.Ordinal)
+            .Replace("__ALLOWED_PATH_JSON__", allowedPathJson, StringComparison.Ordinal)
             .Replace("__BLOCKED_PATHS_JSON__", blockedPathsJson, StringComparison.Ordinal);
     }
 
@@ -854,7 +835,7 @@ internal sealed class MainForm : Form
     {
         if (!Uri.TryCreate(e.Uri, UriKind.Absolute, out var target) ||
             !_settings.IsAllowedNavigationUri(target) ||
-            IsBlockedForCurrentMode(target))
+            _settings.IsBlockedNavigationUri(target))
         {
             e.Cancel = true;
             _status.Text = "העמוד המבוקש חסום בעמדה זו.";
@@ -888,7 +869,7 @@ internal sealed class MainForm : Form
     {
         if (!Uri.TryCreate(e.Uri, UriKind.Absolute, out var target) ||
             !_settings.IsAllowedNavigationUri(target) ||
-            IsBlockedForCurrentMode(target))
+            _settings.IsBlockedNavigationUri(target))
         {
             e.Cancel = true;
             _status.Text = "העמוד המבוקש חסום בעמדה זו.";
