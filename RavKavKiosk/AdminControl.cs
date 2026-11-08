@@ -171,6 +171,7 @@ internal sealed class AdminManagerForm : Form
     private readonly List<(string Url, string Text, bool Blocked)> scannedLinks = [];
     private readonly Label selected = new() { AutoSize = false, Height = 38, Dock = DockStyle.Top, TextAlign = ContentAlignment.MiddleRight };
     private readonly string currentUrl;
+    private string selectedElementHost = "";
     public event Action? PickElementRequested;
     public event Action? ScanLinksRequested;
     public event Action? RulesChanged;
@@ -258,8 +259,9 @@ internal sealed class AdminManagerForm : Form
         if (!policy.AllowedHosts.Contains(host, StringComparer.OrdinalIgnoreCase)) policy.AllowedHosts.Add(host);
         AdminPolicyStore.Save(policy); hostInput.Clear(); RefreshRules(); RulesChanged?.Invoke();
     }
-    public void ReceivePickedSelector(string selector, string tag = "", string href = "", string label = "")
+    public void ReceivePickedSelector(string selector, string tag = "", string href = "", string label = "", string host = "")
     {
+        selectedElementHost = string.IsNullOrWhiteSpace(host) && Uri.TryCreate(currentUrl, UriKind.Absolute, out var pageUri) ? pageUri.Host : host;
         var details = string.IsNullOrWhiteSpace(href) ? "" : " | קישור: " + href;
         var caption = string.IsNullOrWhiteSpace(label) ? "" : " | " + label;
         selected.Text = $"רכיב שנבחר ({tag}){caption}{details}: {selector}";
@@ -278,9 +280,10 @@ internal sealed class AdminManagerForm : Form
         var marker = ": ";
         var split = selected.Text.LastIndexOf(marker, StringComparison.Ordinal);
         var selector = selected.Text.StartsWith("רכיב שנבחר", StringComparison.Ordinal) && split >= 0 ? selected.Text[(split + marker.Length)..] : "";
-        if (selector.Length == 0 || !Uri.TryCreate(currentUrl, UriKind.Absolute, out var uri)) { MessageBox.Show(this, "בחר תחילה רכיב מתוך האתר באמצעות לחיצה שמאלית."); return; }
-        policy.Elements.RemoveAll(r => r.Host.Equals(uri.Host, StringComparison.OrdinalIgnoreCase) && r.Selector == selector);
-        policy.Elements.Add(new ElementPolicyRule(uri.Host, selector, allowed));
+        var host = selectedElementHost;
+        if (selector.Length == 0 || string.IsNullOrWhiteSpace(host)) { MessageBox.Show(this, "בחר תחילה רכיב מתוך האתר באמצעות לחיצה שמאלית או בחר כלל רכיב מהרשימה."); return; }
+        policy.Elements.RemoveAll(r => r.Host.Equals(host, StringComparison.OrdinalIgnoreCase) && r.Selector == selector);
+        policy.Elements.Add(new ElementPolicyRule(host, selector, allowed));
         AdminPolicyStore.Save(policy); RefreshRules(); RulesChanged?.Invoke();
     }
     private void RemoveSelected()
@@ -329,6 +332,22 @@ internal sealed class AdminManagerForm : Form
     private void OnRuleSelectionChanged(object? sender, EventArgs e)
     {
         var index = rules.SelectedIndex;
+        if (index < 0) return;
+        if (index < policy.Routes.Count)
+        {
+            var route = policy.Routes[index];
+            ruleInput.Text = $"https://{route.Host}{route.Path}";
+            selected.Text = $"נתיב שנבחר: {(route.Allowed ? "מאושר" : "חסום")} — {ruleInput.Text}";
+            return;
+        }
+        var elementIndex = index - policy.Routes.Count;
+        if (elementIndex >= 0 && elementIndex < policy.Elements.Count)
+        {
+            var element = policy.Elements[elementIndex];
+            selectedElementHost = element.Host;
+            selected.Text = $"רכיב שנבחר (כלל קיים) | {element.Host}: {element.Selector}";
+            return;
+        }
         var offset = policy.Routes.Count + policy.Elements.Count + policy.AllowedHosts.Count + 7 + AppSettings.Load().BlockedPaths.Count;
         var scannedIndex = index - offset;
         if (scannedIndex >= 0 && scannedIndex < scannedLinks.Count)
