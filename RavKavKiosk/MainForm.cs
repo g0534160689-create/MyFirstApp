@@ -281,12 +281,18 @@ internal sealed class MainForm : Form
                 if (IsDisposed || _home.IsDisposed) { image.Dispose(); continue; }
 
                 PictureBox? target = kind switch { "partner" => _partnerLogoBox, "daat" => _daatLogoBox, _ => null };
-                if (kind == "background" && _heroPanel is not null)
+                if (kind == "background")
                 {
-                    var previous = BackgroundImage;
+                    // The home panel fills the form, so a Form.BackgroundImage is hidden
+                    // behind it. Paint the image on the actual surface users see.
+                    var previous = _home.BackgroundImage;
+                    _home.BackgroundImage = image;
+                    _home.BackgroundImageLayout = ImageLayout.Stretch;
+                    previous?.Dispose();
+
+                    // Keep the form background in sync when the browser view is shown.
                     BackgroundImage = image;
                     BackgroundImageLayout = ImageLayout.Stretch;
-                    previous?.Dispose();
                 }
                 else if (target is not null)
                 {
