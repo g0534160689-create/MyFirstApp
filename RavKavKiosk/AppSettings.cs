@@ -70,8 +70,8 @@ internal sealed class AppSettings
     {
         if (!IsSecureHttpUri(uri)) return true;
         var adminDecision = AdminPolicyStore.RouteDecision(uri);
-        if (adminDecision == false) return true;
-        if (adminDecision == true) return false;
+        if (adminDecision.HasValue) return !adminDecision.Value;
+        if (AdminPolicyStore.IsHostAllowed(uri.Host)) return false;
 
         if (IsRavKavUri(uri))
         {
