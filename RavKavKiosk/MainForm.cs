@@ -285,6 +285,11 @@ internal sealed class MainForm : Form
                 {
                     var previous = target.Image;
                     target.Image = image;
+                    if (kind == "daat")
+                        foreach (Control child in target.Controls) child.Visible = false;
+                    else if (target.Parent is not null)
+                        foreach (Control sibling in target.Parent.Controls)
+                            if (sibling is Label) sibling.Visible = false;
                     target.Visible = true;
                     previous?.Dispose();
                 }
