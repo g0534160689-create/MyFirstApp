@@ -857,6 +857,9 @@ internal sealed class MainForm : Form
         var strictPathJson = JsonSerializer.Serialize(strictPath);
         var allowedPathJson = JsonSerializer.Serialize(_settings.RavKavAllowedPath);
         var blockedPathsJson = JsonSerializer.Serialize(_settings.BlockedPaths);
+        var adminRulesJson = JsonSerializer.Serialize(AdminPolicyStore.Load().Routes
+            .Where(r => r.Host.Equals(serviceUri.Host, StringComparison.OrdinalIgnoreCase))
+            .Select(r => new { path = r.Path == "/" ? "/" : r.Path.TrimEnd('/').ToLowerInvariant(), allowed = r.Allowed }));
 
         var script = """
         (() => {
@@ -868,6 +871,7 @@ internal sealed class MainForm : Form
             const blockedRoots = __BLOCKED_PATHS_JSON__.map(p =>
                 String(p).replace(/\\/g, "/").replace(/\/+$/g, "").toLowerCase()
             );
+            const adminRules = __ADMIN_RULES_JSON__;
 
             function normalizedPath(value) {
                 try {
@@ -901,6 +905,10 @@ internal sealed class MainForm : Form
                 const path = normalizedPath(value);
                 if (path === "__BLOCK_INVALID__") return true;
                 if (path === null) return false;
+                const matchingRules = adminRules
+                    .filter(rule => rule.path === "/" || path === rule.path || path.startsWith(rule.path + "/"))
+                    .sort((a, b) => b.path.length - a.path.length);
+                if (matchingRules.length) return !matchingRules[0].allowed;
                 if (strictPath) return path !== allowedPath.toLowerCase();
                 return blockedRoots.some(root =>
                     path === root ||
@@ -963,7 +971,8 @@ internal sealed class MainForm : Form
             .Replace("__ALLOWED_ORIGIN_JSON__", originJson, StringComparison.Ordinal)
             .Replace("__STRICT_PATH__", strictPathJson, StringComparison.Ordinal)
             .Replace("__ALLOWED_PATH_JSON__", allowedPathJson, StringComparison.Ordinal)
-            .Replace("__BLOCKED_PATHS_JSON__", blockedPathsJson, StringComparison.Ordinal);
+            .Replace("__BLOCKED_PATHS_JSON__", blockedPathsJson, StringComparison.Ordinal)
+            .Replace("__ADMIN_RULES_JSON__", adminRulesJson, StringComparison.Ordinal);
     }
 
     private void OnFrameNavigationStarting(object? sender, CoreWebView2NavigationStartingEventArgs e)
