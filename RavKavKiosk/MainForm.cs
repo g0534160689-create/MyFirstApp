@@ -13,7 +13,7 @@ internal sealed class MainForm : Form
     private readonly Label _status = new()
     {
         AutoSize = false, Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleCenter,
-        Font = new Font("Segoe UI", 9), ForeColor = Color.FromArgb(197, 184, 165),
+        Font = new Font("Segoe UI", 8), ForeColor = Color.FromArgb(159, 178, 198),
         Text = "השירות ייפתח בתוך התוכנה"
     };
     private readonly Button _start = new();
@@ -53,12 +53,12 @@ internal sealed class MainForm : Form
         BackColor = Color.FromArgb(9, 18, 34);
         Font = new Font("Segoe UI", 10);
 
-        var header = new BufferedPanel { Dock = DockStyle.Top, Height = 76, BackColor = Color.FromArgb(205, 12, 24, 43), Padding = new Padding(30, 0, 30, 0) };
+        var header = new BufferedPanel { Dock = DockStyle.Top, Height = 64, BackColor = Color.FromArgb(12, 22, 38), Padding = new Padding(28, 0, 28, 0) };
         var brand = new Label
         {
-            Text = "ישיבת דעת אהרן     ✦     המרכז הדיגיטלי", Dock = DockStyle.Right, Width = 560,
-            ForeColor = Gold, Font = new Font("Segoe UI", 18, FontStyle.Bold),
-            TextAlign = ContentAlignment.MiddleRight, BackColor = Color.FromArgb(205, 19, 39, 66)
+            Text = "ישיבת דעת אהרן     ✦     המרכז הדיגיטלי", Dock = DockStyle.Right, Width = 520,
+            ForeColor = Color.FromArgb(255, 222, 161), Font = new Font("Segoe UI", 16, FontStyle.Bold),
+            TextAlign = ContentAlignment.MiddleRight, BackColor = Color.Transparent
         };
         _back.Text = "חזרה למסך הראשי";
         _back.Dock = DockStyle.Left;
@@ -72,7 +72,7 @@ internal sealed class MainForm : Form
         header.Controls.Add(brand);
         header.Controls.Add(_back);
 
-        var footer = new BufferedPanel { Dock = DockStyle.Bottom, Height = 38, BackColor = Color.FromArgb(205, 12, 24, 43), Padding = new Padding(12, 0, 12, 0) };
+        var footer = new BufferedPanel { Dock = DockStyle.Bottom, Height = 32, BackColor = Color.FromArgb(12, 22, 38), Padding = new Padding(12, 0, 12, 0) };
         footer.Controls.Add(_status);
 
         Controls.Add(_home);
@@ -103,92 +103,97 @@ internal sealed class MainForm : Form
 
     private void BuildHome()
     {
-        _home.BackColor = Color.Transparent;
+        _home.BackColor = Color.FromArgb(12, 22, 38);
+        _home.Padding = new Padding(0);
+
         var layout = new TableLayoutPanel
         {
-            Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 7,
-            Padding = new Padding(42, 22, 42, 22),
+            Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 6,
+            Padding = new Padding(34, 18, 34, 20),
             BackColor = Color.Transparent
         };
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 56));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 188));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 62));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 164));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 54));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 116));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 104));
 
-        var meta = new BufferedPanel { Dock = DockStyle.Fill, BackColor = Color.Transparent, Padding = new Padding(2) };
-        var partnerHost = new BufferedPanel { Dock = DockStyle.Right, Width = 176, BackColor = Color.White, Padding = new Padding(8) };
-        partnerHost.Controls.Add(new Label { Text = "אוצר החכמה", Dock = DockStyle.Fill, ForeColor = Color.FromArgb(70, 48, 20), Font = new Font("Segoe UI", 13, FontStyle.Bold), TextAlign = ContentAlignment.MiddleCenter, BackColor = Color.White });
-        _partnerLogoBox = new PictureBox { Dock = DockStyle.Fill, SizeMode = PictureBoxSizeMode.Zoom, BackColor = Color.White, Visible = false };
+        // Top utility strip
+        var meta = new BufferedPanel { Dock = DockStyle.Fill, BackColor = Color.Transparent };
+        var partnerHost = new BufferedPanel { Dock = DockStyle.Right, Width = 150, BackColor = Color.FromArgb(244, 240, 231), Padding = new Padding(8) };
+        partnerHost.Controls.Add(new Label { Text = "אוצר החכמה", Dock = DockStyle.Fill, ForeColor = Color.FromArgb(64, 53, 37), Font = new Font("Segoe UI", 11, FontStyle.Bold), TextAlign = ContentAlignment.MiddleCenter, BackColor = Color.Transparent });
+        _partnerLogoBox = new PictureBox { Dock = DockStyle.Fill, SizeMode = PictureBoxSizeMode.Zoom, BackColor = Color.Transparent, Visible = false };
         partnerHost.Controls.Add(_partnerLogoBox);
         meta.Controls.Add(partnerHost);
 
         _dateClock.Dock = DockStyle.Left;
-        _dateClock.Width = 330;
-        _dateClock.ForeColor = Color.FromArgb(242, 231, 210);
-        _dateClock.BackColor = Color.FromArgb(19, 39, 66);
-        _dateClock.Font = new Font("Segoe UI", 10, FontStyle.Bold);
-        _dateClock.TextAlign = ContentAlignment.MiddleCenter;
+        _dateClock.Width = 300;
+        _dateClock.ForeColor = Color.FromArgb(179, 196, 215);
+        _dateClock.BackColor = Color.Transparent;
+        _dateClock.Font = new Font("Segoe UI", 9, FontStyle.Bold);
+        _dateClock.TextAlign = ContentAlignment.MiddleLeft;
         meta.Controls.Add(_dateClock);
 
-        var hero = new BufferedPanel { Dock = DockStyle.Fill, BackColor = Color.Transparent, Padding = new Padding(28, 16, 28, 16) };
-        _heroPanel = hero;
+        // Hero area
+        var hero = new PremiumCardPanel
+        {
+            Dock = DockStyle.Fill, Padding = new Padding(30, 17, 30, 17),
+            GradientTop = Color.FromArgb(29, 54, 82),
+            GradientBottom = Color.FromArgb(17, 34, 55),
+            BorderColor = Color.FromArgb(65, 91, 119),
+            HoverBorderColor = Color.FromArgb(65, 91, 119)
+        };
+        _heroPanel = new BufferedPanel { Dock = DockStyle.Fill, BackColor = Color.Transparent };
         var heroLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1, BackColor = Color.Transparent };
         heroLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        heroLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 170));
+        heroLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 150));
         var heroText = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3, BackColor = Color.Transparent };
-        heroText.RowStyles.Add(new RowStyle(SizeType.Percent, 44));
+        heroText.RowStyles.Add(new RowStyle(SizeType.Percent, 43));
         heroText.RowStyles.Add(new RowStyle(SizeType.Percent, 30));
-        heroText.RowStyles.Add(new RowStyle(SizeType.Percent, 26));
+        heroText.RowStyles.Add(new RowStyle(SizeType.Percent, 27));
         heroText.Controls.Add(new Label
         {
-            Text = "ישיבת דעת אהרן", Dock = DockStyle.Fill,
-            ForeColor = Color.FromArgb(255, 224, 157), Font = new Font("Segoe UI", 29, FontStyle.Bold),
-            TextAlign = ContentAlignment.BottomRight, BackColor = Color.FromArgb(19, 39, 66)
+            Text = "המרכז הדיגיטלי", Dock = DockStyle.Fill,
+            ForeColor = Color.FromArgb(255, 222, 161), Font = new Font("Segoe UI", 28, FontStyle.Bold),
+            TextAlign = ContentAlignment.BottomRight, BackColor = Color.Transparent
         }, 0, 0);
         heroText.Controls.Add(new Label
         {
-            Text = "כל מה שצריך בלי לצאת מהישיבה", Dock = DockStyle.Fill,
-            ForeColor = Color.FromArgb(250, 246, 237), Font = new Font("Segoe UI", 16, FontStyle.Bold),
-            TextAlign = ContentAlignment.MiddleRight
+            Text = "ישיבת דעת אהרן  ·  כל השירותים במקום אחד", Dock = DockStyle.Fill,
+            ForeColor = Color.FromArgb(245, 248, 252), Font = new Font("Segoe UI", 14, FontStyle.Bold),
+            TextAlign = ContentAlignment.MiddleRight, BackColor = Color.Transparent
         }, 0, 1);
         heroText.Controls.Add(new Label
         {
             Text = "בשיתוף מערכת אוצר החכמה  •  שע״י ישיבתנו הקדושה", Dock = DockStyle.Fill,
-            ForeColor = Color.FromArgb(207, 184, 147), Font = new Font("Segoe UI", 10),
-            TextAlign = ContentAlignment.TopRight, BackColor = Color.FromArgb(19, 39, 66)
+            ForeColor = Color.FromArgb(178, 195, 213), Font = new Font("Segoe UI", 9),
+            TextAlign = ContentAlignment.TopRight, BackColor = Color.Transparent
         }, 0, 2);
 
-        var logo = new PictureBox { Dock = DockStyle.Fill, SizeMode = PictureBoxSizeMode.Zoom, BackColor = Color.FromArgb(19, 39, 66), Padding = new Padding(10) };
-        logo.Controls.Add(new Label { Text = "דעת אהרן", Dock = DockStyle.Fill, ForeColor = Gold, Font = new Font("Segoe UI", 18, FontStyle.Bold), TextAlign = ContentAlignment.MiddleCenter, BackColor = Color.FromArgb(19, 39, 66) });
+        var logo = new PictureBox { Dock = DockStyle.Fill, SizeMode = PictureBoxSizeMode.Zoom, BackColor = Color.FromArgb(24, 47, 72), Padding = new Padding(12) };
+        logo.Controls.Add(new Label { Text = "דעת אהרן", Dock = DockStyle.Fill, ForeColor = Color.FromArgb(255, 222, 161), Font = new Font("Segoe UI", 16, FontStyle.Bold), TextAlign = ContentAlignment.MiddleCenter, BackColor = Color.Transparent });
         _daatLogoBox = logo;
         heroLayout.Controls.Add(heroText, 0, 0);
         heroLayout.Controls.Add(logo, 1, 0);
-        hero.Controls.Add(heroLayout);
 
-        var sectionTitle = new Label
-        {
-            Text = "המרכז הדיגיטלי של הישיבה     |     כל השירותים והקישורים במקום אחד",
-            Dock = DockStyle.Fill, ForeColor = Color.FromArgb(229, 201, 155),
-            Font = new Font("Segoe UI", 11, FontStyle.Bold), TextAlign = ContentAlignment.MiddleCenter,
-            BackColor = Color.Transparent
-        };
+        var heroHost = new BufferedPanel { Dock = DockStyle.Fill, BackColor = Color.Transparent, Padding = new Padding(0) };
+        heroHost.Controls.Add(heroLayout);
+        hero.Controls.Add(heroHost);
 
         var searchHost = new Panel
         {
-            Dock = DockStyle.Fill, BackColor = Color.FromArgb(18, 35, 58),
-            Padding = new Padding(18, 5, 18, 5), Margin = new Padding(0, 4, 0, 4)
+            Dock = DockStyle.Fill, BackColor = Color.FromArgb(25, 43, 64),
+            Padding = new Padding(16, 7, 16, 7), Margin = new Padding(0, 5, 0, 5)
         };
-        var searchLabel = new Label { Text = "⌕", Dock = DockStyle.Right, Width = 42, ForeColor = Gold, Font = new Font("Segoe UI", 25, FontStyle.Bold), TextAlign = ContentAlignment.MiddleCenter };
+        var searchLabel = new Label { Text = "⌕", Dock = DockStyle.Right, Width = 42, ForeColor = Color.FromArgb(255, 213, 143), Font = new Font("Segoe UI", 23, FontStyle.Bold), TextAlign = ContentAlignment.MiddleCenter, BackColor = Color.Transparent };
         _searchBox.Dock = DockStyle.Fill;
         _searchBox.BorderStyle = BorderStyle.None;
-        _searchBox.BackColor = Color.FromArgb(27, 48, 74);
-        _searchBox.ForeColor = Color.FromArgb(251, 248, 242);
-        _searchBox.Font = new Font("Segoe UI", 14);
+        _searchBox.BackColor = Color.FromArgb(25, 43, 64);
+        _searchBox.ForeColor = Color.FromArgb(246, 248, 251);
+        _searchBox.Font = new Font("Segoe UI", 13);
         _searchBox.TextAlign = HorizontalAlignment.Right;
-        _searchBox.PlaceholderText = "חיפוש מהיר — הקלד שם שירות, מבחן או נושא...";
+        _searchBox.PlaceholderText = "חיפוש שירותים, מבחנים ומקורות...";
         _searchBox.TextChanged += (_, _) => { _searchTimer.Stop(); _searchTimer.Start(); };
         searchHost.Controls.Add(_searchBox);
         searchHost.Controls.Add(searchLabel);
@@ -209,31 +214,35 @@ internal sealed class MainForm : Form
         _cardsPanel.WrapContents = true;
         _cardsPanel.FlowDirection = FlowDirection.RightToLeft;
         _cardsPanel.BackColor = Color.Transparent;
-        _cardsPanel.Padding = new Padding(8, 9, 8, 9);
+        _cardsPanel.Padding = new Padding(6, 8, 6, 8);
 
-        var ravPanel = new Panel
+        var ravPanel = new PremiumCardPanel
         {
-            Dock = DockStyle.Fill, BackColor = Color.FromArgb(18, 35, 58),
-            Padding = new Padding(16, 7, 16, 7)
+            Dock = DockStyle.Fill, Padding = new Padding(18, 8, 18, 8),
+            GradientTop = Color.FromArgb(24, 47, 70),
+            GradientBottom = Color.FromArgb(16, 33, 52),
+            BorderColor = Color.FromArgb(57, 91, 117),
+            HoverBorderColor = Color.FromArgb(57, 91, 117)
         };
         var ravTitle = new Label
         {
             Text = "עמדת רב־קו  |  טעינה מאובטחת בתוך התוכנה",
-            Dock = DockStyle.Top, Height = 30, ForeColor = Color.FromArgb(255, 220, 150),
-            Font = new Font("Segoe UI", 12, FontStyle.Bold), TextAlign = ContentAlignment.MiddleCenter
+            Dock = DockStyle.Top, Height = 28, ForeColor = Color.FromArgb(255, 220, 158),
+            Font = new Font("Segoe UI", 11, FontStyle.Bold), TextAlign = ContentAlignment.MiddleCenter,
+            BackColor = Color.Transparent
         };
         var ravButtons = new FlowLayoutPanel
         {
             Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft,
-            WrapContents = false, BackColor = Color.FromArgb(18, 35, 58), Padding = new Padding(0, 2, 0, 0)
+            WrapContents = false, BackColor = Color.Transparent, Padding = new Padding(0, 3, 0, 0)
         };
         _start.Text = "◈   טעינה באמצעות HopOn";
-        StyleServiceButton(_start, Color.FromArgb(153, 117, 53));
-        _start.Width = 270; _start.Height = 43; _start.Margin = new Padding(8, 2, 8, 2);
+        StyleServiceButton(_start, Color.FromArgb(148, 107, 48));
+        _start.Width = 260; _start.Height = 42; _start.Margin = new Padding(7, 2, 7, 2);
         _start.Click += async (_, _) => await OpenOfficialServiceAsync(_settings.StartUrl, "HopOn");
         _ravKavStart.Text = "◈   טעינה באמצעות רב־קו אונליין";
-        StyleServiceButton(_ravKavStart, Color.FromArgb(44, 91, 132));
-        _ravKavStart.Width = 300; _ravKavStart.Height = 43; _ravKavStart.Margin = new Padding(8, 2, 8, 2);
+        StyleServiceButton(_ravKavStart, Color.FromArgb(42, 91, 132));
+        _ravKavStart.Width = 290; _ravKavStart.Height = 42; _ravKavStart.Margin = new Padding(7, 2, 7, 2);
         _ravKavStart.Click += async (_, _) => await OpenOfficialServiceAsync(_settings.RavKavStartUrl, "רב־קו אונליין");
         ravButtons.Controls.Add(_start);
         ravButtons.Controls.Add(_ravKavStart);
@@ -242,17 +251,14 @@ internal sealed class MainForm : Form
 
         layout.Controls.Add(meta, 0, 0);
         layout.Controls.Add(hero, 0, 1);
-        layout.Controls.Add(sectionTitle, 0, 2);
-        layout.Controls.Add(searchHost, 0, 3);
-        layout.Controls.Add(filters, 0, 4);
-        layout.Controls.Add(_cardsPanel, 0, 5);
-        layout.Controls.Add(ravPanel, 0, 6);
+        layout.Controls.Add(searchHost, 0, 2);
+        layout.Controls.Add(filters, 0, 3);
+        layout.Controls.Add(_cardsPanel, 0, 4);
+        layout.Controls.Add(ravPanel, 0, 5);
         _home.Controls.Add(layout);
         _cardsPanel.Resize += (_, _) => ResizeExistingCards();
         RenderCards();
-    }
-
-    private async Task LoadVisualAssetsAsync()
+    }    private async Task LoadVisualAssetsAsync()
     {
         var jobs = new List<Task<(string kind, Image? image)>>();
         if (File.Exists(_backgroundImagePath))
@@ -369,44 +375,45 @@ internal sealed class MainForm : Form
 
         _cardsCreated = true;
         _cardsPanel.SuspendLayout();
-        var availableWidth = Math.Max(340, _cardsPanel.ClientSize.Width - 42);
-        var columns = availableWidth >= 1120 ? 3 : availableWidth >= 720 ? 2 : 1;
-        var cardWidth = Math.Clamp((availableWidth - (columns * 22)) / columns, 320, 470);
+        var availableWidth = Math.Max(340, _cardsPanel.ClientSize.Width - 34);
+        var columns = availableWidth >= 1160 ? 3 : availableWidth >= 720 ? 2 : 1;
+        var cardWidth = Math.Clamp((availableWidth - (columns * 20)) / columns, 310, 480);
 
         foreach (var link in PortalLinks)
         {
-            var categoryColor = link.Category switch
+            var featured = link.Id == "nedarim-personal";
+            var categoryColor = featured ? Color.FromArgb(90, 205, 181) : link.Category switch
             {
-                "tests" => Color.FromArgb(225, 190, 112),
-                "services" => Color.FromArgb(91, 176, 164),
-                _ => Color.FromArgb(132, 157, 220)
+                "tests" => Color.FromArgb(230, 190, 119),
+                "services" => Color.FromArgb(91, 190, 174),
+                _ => Color.FromArgb(142, 170, 220)
             };
             var card = new PremiumCardPanel
             {
-                Width = cardWidth, Height = 184, Margin = new Padding(10),
-                Cursor = Cursors.Hand, Tag = link, Padding = new Padding(17, 13, 17, 13),
-                GradientTop = Color.FromArgb(28, 53, 82),
-                GradientBottom = Color.FromArgb(14, 28, 47),
-                BorderColor = Color.FromArgb(115, categoryColor),
-                HoverBorderColor = Color.FromArgb(235, categoryColor)
+                Width = cardWidth, Height = 174, Margin = new Padding(9),
+                Cursor = Cursors.Hand, Tag = link, Padding = new Padding(15, 12, 15, 12),
+                GradientTop = featured ? Color.FromArgb(31, 76, 78) : Color.FromArgb(29, 49, 72),
+                GradientBottom = featured ? Color.FromArgb(18, 48, 55) : Color.FromArgb(17, 32, 51),
+                BorderColor = featured ? Color.FromArgb(100, 151, 137) : Color.FromArgb(58, 83, 110),
+                HoverBorderColor = categoryColor
             };
 
-            var accent = new Panel { Dock = DockStyle.Right, Width = 5, BackColor = categoryColor, Margin = new Padding(0) };
+            var accent = new Panel { Dock = DockStyle.Right, Width = 4, BackColor = categoryColor, Margin = new Padding(0) };
             var icon = new Label
             {
-                Text = link.Category switch { "tests" => "✧", "services" => "▣", _ => "▤" },
-                Dock = DockStyle.Right, Width = 62, ForeColor = Color.FromArgb(255, 224, 164),
-                Font = new Font("Segoe UI Symbol", 27, FontStyle.Bold),
-                TextAlign = ContentAlignment.MiddleCenter, BackColor = Color.FromArgb(37, 66, 98)
+                Text = featured ? "↗" : link.Category switch { "tests" => "✧", "services" => "▣", _ => "▤" },
+                Dock = DockStyle.Right, Width = 54, ForeColor = categoryColor,
+                Font = new Font("Segoe UI Symbol", 24, FontStyle.Bold),
+                TextAlign = ContentAlignment.MiddleCenter, BackColor = Color.FromArgb(34, 57, 79)
             };
             var fav = new Button
             {
                 Name = "favoriteButton",
                 Text = _favorites.Contains(link.Id) ? "★" : "☆",
-                Dock = DockStyle.Left, Width = 42,
+                Dock = DockStyle.Left, Width = 38,
                 FlatStyle = FlatStyle.Flat, ForeColor = Color.FromArgb(255, 218, 125),
-                BackColor = Color.FromArgb(29, 48, 72),
-                Font = new Font("Segoe UI", 18, FontStyle.Bold), Cursor = Cursors.Hand,
+                BackColor = Color.FromArgb(27, 45, 66),
+                Font = new Font("Segoe UI", 16, FontStyle.Bold), Cursor = Cursors.Hand,
                 UseVisualStyleBackColor = false
             };
             fav.FlatAppearance.BorderSize = 0;
@@ -417,32 +424,32 @@ internal sealed class MainForm : Form
                 ApplyCardFilter();
             };
 
-            var content = new BufferedPanel { Dock = DockStyle.Fill, BackColor = Color.FromArgb(23, 43, 68), Padding = new Padding(12, 0, 10, 0) };
+            var content = new BufferedPanel { Dock = DockStyle.Fill, BackColor = Color.FromArgb(23, 42, 62), Padding = new Padding(11, 0, 9, 0) };
             var badge = new Label
             {
-                Text = "●  " + link.Badge.ToUpperInvariant(), Dock = DockStyle.Top, Height = 27,
+                Text = (featured ? "●  מומלץ" : "●  " + link.Badge), Dock = DockStyle.Top, Height = 25,
                 ForeColor = categoryColor, Font = new Font("Segoe UI", 9, FontStyle.Bold),
-                TextAlign = ContentAlignment.MiddleRight, BackColor = Color.FromArgb(23, 43, 68)
+                TextAlign = ContentAlignment.MiddleRight, BackColor = Color.Transparent
             };
             var title = new Label
             {
-                Text = link.Title, Dock = DockStyle.Top, Height = 42,
-                ForeColor = Color.FromArgb(255, 250, 239), Font = new Font("Segoe UI", 18, FontStyle.Bold),
-                TextAlign = ContentAlignment.MiddleRight, Cursor = Cursors.Hand, BackColor = Color.FromArgb(23, 43, 68)
+                Text = link.Title, Dock = DockStyle.Top, Height = 40,
+                ForeColor = Color.FromArgb(249, 250, 252), Font = new Font("Segoe UI", 16, FontStyle.Bold),
+                TextAlign = ContentAlignment.MiddleRight, Cursor = Cursors.Hand, BackColor = Color.Transparent
             };
             var description = new Label
             {
-                Text = link.Subtitle, Dock = DockStyle.Top, Height = 38,
-                ForeColor = Color.FromArgb(188, 204, 221), Font = new Font("Segoe UI", 10),
-                TextAlign = ContentAlignment.TopRight, Cursor = Cursors.Hand, BackColor = Color.FromArgb(23, 43, 68)
+                Text = link.Subtitle, Dock = DockStyle.Top, Height = 36,
+                ForeColor = Color.FromArgb(181, 197, 213), Font = new Font("Segoe UI", 9),
+                TextAlign = ContentAlignment.TopRight, Cursor = Cursors.Hand, BackColor = Color.Transparent
             };
             var bottom = new Label
             {
                 Name = "entryCount",
                 Text = "כניסה לשירות  ←      " + _clickCounts.GetValueOrDefault(link.Id) + " כניסות",
-                Dock = DockStyle.Bottom, Height = 30,
-                ForeColor = Color.FromArgb(225, 190, 112), Font = new Font("Segoe UI", 9, FontStyle.Bold),
-                TextAlign = ContentAlignment.MiddleRight, Cursor = Cursors.Hand, BackColor = Color.FromArgb(23, 43, 68)
+                Dock = DockStyle.Bottom, Height = 28,
+                ForeColor = categoryColor, Font = new Font("Segoe UI", 9, FontStyle.Bold),
+                TextAlign = ContentAlignment.MiddleRight, Cursor = Cursors.Hand, BackColor = Color.Transparent
             };
             content.Controls.Add(bottom);
             content.Controls.Add(description);
@@ -470,18 +477,16 @@ internal sealed class MainForm : Form
 
         _emptyState = new Label
         {
-            Text = "לא נמצאו תוצאות\r\nנסה לשנות את מילות החיפוש",
-            Width = 520, Height = 120, ForeColor = Color.FromArgb(231, 215, 184),
-            Font = new Font("Segoe UI", 15, FontStyle.Bold),
-            TextAlign = ContentAlignment.MiddleCenter, BackColor = Color.FromArgb(9, 18, 34),
+            Text = "לא נמצאו שירותים מתאימים\r\nאפשר לנסות חיפוש אחר",
+            Width = 520, Height = 110, ForeColor = Color.FromArgb(210, 222, 235),
+            Font = new Font("Segoe UI", 14, FontStyle.Bold),
+            TextAlign = ContentAlignment.MiddleCenter, BackColor = Color.Transparent,
             Visible = false
         };
         _cardsPanel.Controls.Add(_emptyState);
         _cardsPanel.ResumeLayout();
         ApplyCardFilter();
-    }
-
-    private void ApplyCardFilter()
+    }    private void ApplyCardFilter()
     {
         if (_cardsPanel.IsDisposed) return;
         var query = _searchBox.Text.Trim();
