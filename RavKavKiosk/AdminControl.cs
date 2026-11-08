@@ -222,14 +222,19 @@ internal sealed class AdminManagerForm : Form
         if (!policy.AllowedHosts.Contains(host, StringComparer.OrdinalIgnoreCase)) policy.AllowedHosts.Add(host);
         AdminPolicyStore.Save(policy); hostInput.Clear(); RefreshRules(); RulesChanged?.Invoke();
     }
-    public void ReceivePickedSelector(string selector)
+    public void ReceivePickedSelector(string selector, string tag = "", string href = "", string label = "")
     {
-        selected.Text = "רכיב שנבחר: " + selector; Show(); Activate();
+        var details = string.IsNullOrWhiteSpace(href) ? "" : " | קישור: " + href;
+        var caption = string.IsNullOrWhiteSpace(label) ? "" : " | " + label;
+        selected.Text = $"רכיב שנבחר ({tag}){caption}{details}: {selector}";
+        Show(); Activate();
     }
     private void SaveSelectedElement(bool allowed)
     {
-        var selector = selected.Text.StartsWith("רכיב שנבחר: ", StringComparison.Ordinal) ? selected.Text["רכיב שנבחר: ".Length..] : "";
-        if (selector.Length == 0 || !Uri.TryCreate(currentUrl, UriKind.Absolute, out var uri)) { MessageBox.Show(this, "בחר תחילה רכיב מתוך האתר."); return; }
+        var marker = ": ";
+        var split = selected.Text.LastIndexOf(marker, StringComparison.Ordinal);
+        var selector = selected.Text.StartsWith("רכיב שנבחר", StringComparison.Ordinal) && split >= 0 ? selected.Text[(split + marker.Length)..] : "";
+        if (selector.Length == 0 || !Uri.TryCreate(currentUrl, UriKind.Absolute, out var uri)) { MessageBox.Show(this, "בחר תחילה רכיב מתוך האתר באמצעות לחיצה ימנית."); return; }
         policy.Elements.RemoveAll(r => r.Host.Equals(uri.Host, StringComparison.OrdinalIgnoreCase) && r.Selector == selector);
         policy.Elements.Add(new ElementPolicyRule(uri.Host, selector, allowed));
         AdminPolicyStore.Save(policy); RefreshRules(); RulesChanged?.Invoke();
