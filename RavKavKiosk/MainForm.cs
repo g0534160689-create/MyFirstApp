@@ -91,6 +91,7 @@ internal sealed class MainForm : Form
 
     private static readonly PortalLink[] PortalLinks =
     [
+        new("nedarim-personal", "נדרים פלוס – אזור אישי", "כניסה לאזור האישי של נדרים פלוס", "https://donors.matara.pro/login", "services", "אזור אישי"),
         new("torah-dileyh", "תורה דיליה", "סיכומי סוגיות וכתיבת חבורות", "https://www.matara.pro/nedarimplus/online/?mosad=7005288", "tests", "נפוץ"),
         new("print-charge", "הטענת הדפסות", "טעינת יתרת צילום והדפסה מהירה", "https://www.matara.pro/nedarimplus/Forms/4488.html?MasofId=&ClientId=&Zeout=&Version=1", "services", "שירות"),
         new("dirshu", "מבחני דרשו", "ציונים, מועדי בחינות והרשמה", "https://matara.pro/nedarimplus/online/?mosad=7005954", "tests", "דרשו"),
