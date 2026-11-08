@@ -48,6 +48,8 @@ internal sealed class MainForm : Form
         Text = "ישיבת דעת אהרן | כל מה שצריך בלי לצאת מהישיבה";
         RightToLeft = RightToLeft.Yes;
         RightToLeftLayout = true;
+        KeyPreview = true;
+        KeyDown += (_, e) => { if (e.Control && e.Shift && e.KeyCode == Keys.A) { e.Handled = true; OpenAdminManager(); } };
         DoubleBuffered = true;
         SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
         StartPosition = FormStartPosition.CenterScreen;
@@ -80,7 +82,8 @@ internal sealed class MainForm : Form
         _adminButton.Font = new Font("Segoe UI", 9, FontStyle.Bold);
         _adminButton.Cursor = Cursors.Hand;
         _adminButton.Click += (_, _) => OpenAdminManager();
-        header.Controls.Add(_adminButton);
+        _adminButton.Visible = false; // Hidden administrator entry; Ctrl+Shift+A opens authentication.
+
         header.Controls.Add(_back);
 
         var footer = new BufferedPanel { Dock = DockStyle.Bottom, Height = 32, BackColor = Color.FromArgb(12, 22, 38), Padding = new Padding(12, 0, 12, 0) };
@@ -783,17 +786,21 @@ internal sealed class MainForm : Form
             previous = e.target instanceof Element ? e.target : null;
             if (previous) { previous.__kioskOldOutline = previous.style.outline; previous.style.outline = "3px solid #f0b84b"; }
           };
-          const click = e => {
+          const pick = e => {
+            if (e.button !== 2) return;
             const el = e.target instanceof Element ? e.target : null; if (!el) return;
             e.preventDefault(); e.stopImmediatePropagation(); e.stopPropagation();
             const selector = selectorFor(el);
+            const tag = el.tagName.toLowerCase();
+            const href = el.closest("a[href]")?.href || "";
+            const label = (el.innerText || el.getAttribute("aria-label") || el.getAttribute("title") || "").trim().slice(0,120);
             if (previous) previous.style.outline = previous.__kioskOldOutline || "";
-            document.removeEventListener("mousemove", move, true); document.removeEventListener("click", click, true);
+            document.removeEventListener("mousemove", move, true); document.removeEventListener("contextmenu", pick, true);
             window.__kioskPickerInstalled = false; document.body.style.cursor = "";
-            chrome.webview.postMessage({type:"element-picked", selector});
+            chrome.webview.postMessage({type:"element-picked", selector, tag, href, label});
           };
           document.body.style.cursor = "crosshair";
-          document.addEventListener("mousemove", move, true); document.addEventListener("click", click, true);
+          document.addEventListener("mousemove", move, true); document.addEventListener("contextmenu", pick, true);
         })();
         """;
         try { await _browser.CoreWebView2.ExecuteScriptAsync(script); }
