@@ -11,6 +11,7 @@ internal sealed class AppSettings
     public string RavKavAllowedPath { get; set; } = "/he/store/connect";
     public List<string> PortalAllowedHosts { get; set; } =
     [
+        "donors.matara.pro",
         "www.matara.pro",
         "matara.pro",
         "rishumon.net",
