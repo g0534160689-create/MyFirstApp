@@ -9,7 +9,7 @@ internal sealed class MainForm : Form
 {
     private readonly AppSettings _settings = AppSettings.Load();
     private readonly WebView2 _browser = new() { Dock = DockStyle.Fill, Visible = false };
-    private readonly Panel _home = new() { Dock = DockStyle.Fill, BackColor = Color.FromArgb(10, 7, 5) };
+    private readonly BufferedPanel _home = new() { Dock = DockStyle.Fill, BackColor = Color.FromArgb(9, 18, 34) };
     private readonly Label _status = new()
     {
         AutoSize = false, Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleCenter,
@@ -25,9 +25,9 @@ internal sealed class MainForm : Form
     private bool _browserInitialized;
     private readonly string _backgroundImagePath = Path.Combine(AppContext.BaseDirectory, "Assets", "bg.jpg");
 
-    private static readonly Color Navy = Color.FromArgb(20, 15, 12);
-    private static readonly Color Blue = Color.FromArgb(190, 137, 55);
-    private static readonly Color Gold = Color.FromArgb(229, 184, 105);
+    private static readonly Color Navy = Color.FromArgb(14, 27, 48);
+    private static readonly Color Blue = Color.FromArgb(49, 91, 133);
+    private static readonly Color Gold = Color.FromArgb(225, 190, 112);
     private readonly System.Windows.Forms.Timer _clockTimer = new() { Interval = 1000 };
     private readonly TextBox _searchBox = new();
     private readonly BufferedFlowLayoutPanel _cardsPanel = new();
@@ -47,10 +47,10 @@ internal sealed class MainForm : Form
         StartPosition = FormStartPosition.CenterScreen;
         WindowState = FormWindowState.Maximized;
         MinimumSize = new Size(760, 560);
-        BackColor = Color.FromArgb(10, 7, 5);
+        BackColor = Color.FromArgb(9, 18, 34);
         Font = new Font("Segoe UI", 10);
 
-        var header = new Panel { Dock = DockStyle.Top, Height = 68, BackColor = Color.FromArgb(18, 13, 10), Padding = new Padding(30, 0, 30, 0) };
+        var header = new BufferedPanel { Dock = DockStyle.Top, Height = 76, BackColor = Color.FromArgb(12, 24, 43), Padding = new Padding(30, 0, 30, 0) };
         var brand = new Label
         {
             Text = "ישיבת דעת אהרן     ✦     המרכז הדיגיטלי", Dock = DockStyle.Right, Width = 560,
@@ -69,7 +69,7 @@ internal sealed class MainForm : Form
         header.Controls.Add(brand);
         header.Controls.Add(_back);
 
-        var footer = new Panel { Dock = DockStyle.Bottom, Height = 34, BackColor = Color.FromArgb(18, 13, 10), Padding = new Padding(12, 0, 12, 0) };
+        var footer = new BufferedPanel { Dock = DockStyle.Bottom, Height = 38, BackColor = Color.FromArgb(12, 24, 43), Padding = new Padding(12, 0, 12, 0) };
         footer.Controls.Add(_status);
 
         Controls.Add(_home);
@@ -104,7 +104,7 @@ internal sealed class MainForm : Form
         {
             Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 7,
             Padding = new Padding(34, 16, 34, 16),
-            BackColor = Color.FromArgb(218, 8, 6, 5)
+            BackColor = Color.FromArgb(9, 18, 34)
         };
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 164));
@@ -114,7 +114,7 @@ internal sealed class MainForm : Form
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 104));
 
-        var meta = new Panel { Dock = DockStyle.Fill, BackColor = Color.Transparent, Padding = new Padding(2) };
+        var meta = new BufferedPanel { Dock = DockStyle.Fill, BackColor = Color.FromArgb(9, 18, 34), Padding = new Padding(2) };
         var partnerPath = Path.Combine(AppContext.BaseDirectory, "Assets", "otzar-logo.png");
         if (File.Exists(partnerPath))
         {
@@ -140,11 +140,11 @@ internal sealed class MainForm : Form
         _dateClock.TextAlign = ContentAlignment.MiddleCenter;
         meta.Controls.Add(_dateClock);
 
-        var hero = new Panel { Dock = DockStyle.Fill, BackColor = Color.FromArgb(95, 12, 9, 7), Padding = new Padding(18, 8, 18, 8) };
-        var heroLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1, BackColor = Color.Transparent };
+        var hero = new BufferedPanel { Dock = DockStyle.Fill, BackColor = Color.FromArgb(19, 39, 66), Padding = new Padding(28, 16, 28, 16) };
+        var heroLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1, BackColor = Color.FromArgb(19, 39, 66) };
         heroLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         heroLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 170));
-        var heroText = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3, BackColor = Color.Transparent };
+        var heroText = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3, BackColor = Color.FromArgb(19, 39, 66) };
         heroText.RowStyles.Add(new RowStyle(SizeType.Percent, 44));
         heroText.RowStyles.Add(new RowStyle(SizeType.Percent, 30));
         heroText.RowStyles.Add(new RowStyle(SizeType.Percent, 26));
@@ -167,7 +167,7 @@ internal sealed class MainForm : Form
             TextAlign = ContentAlignment.TopRight
         }, 0, 2);
 
-        var logo = new PictureBox { Dock = DockStyle.Fill, SizeMode = PictureBoxSizeMode.Zoom, BackColor = Color.Transparent, Padding = new Padding(10) };
+        var logo = new PictureBox { Dock = DockStyle.Fill, SizeMode = PictureBoxSizeMode.Zoom, BackColor = Color.FromArgb(19, 39, 66), Padding = new Padding(10) };
         var logoPath = Path.Combine(AppContext.BaseDirectory, "Assets", "daat-logo.png");
         if (File.Exists(logoPath))
         {
@@ -194,18 +194,18 @@ internal sealed class MainForm : Form
             Text = "המרכז הדיגיטלי של הישיבה     |     כל השירותים והקישורים במקום אחד",
             Dock = DockStyle.Fill, ForeColor = Color.FromArgb(229, 201, 155),
             Font = new Font("Segoe UI", 11, FontStyle.Bold), TextAlign = ContentAlignment.MiddleCenter,
-            BackColor = Color.Transparent
+            BackColor = Color.FromArgb(9, 18, 34)
         };
 
         var searchHost = new Panel
         {
-            Dock = DockStyle.Fill, BackColor = Color.FromArgb(238, 23, 18, 14),
+            Dock = DockStyle.Fill, BackColor = Color.FromArgb(18, 35, 58),
             Padding = new Padding(18, 5, 18, 5), Margin = new Padding(0, 4, 0, 4)
         };
         var searchLabel = new Label { Text = "⌕", Dock = DockStyle.Right, Width = 42, ForeColor = Gold, Font = new Font("Segoe UI", 25, FontStyle.Bold), TextAlign = ContentAlignment.MiddleCenter };
         _searchBox.Dock = DockStyle.Fill;
         _searchBox.BorderStyle = BorderStyle.None;
-        _searchBox.BackColor = Color.FromArgb(32, 24, 18);
+        _searchBox.BackColor = Color.FromArgb(27, 48, 74);
         _searchBox.ForeColor = Color.FromArgb(251, 248, 242);
         _searchBox.Font = new Font("Segoe UI", 14);
         _searchBox.TextAlign = HorizontalAlignment.Right;
@@ -217,7 +217,7 @@ internal sealed class MainForm : Form
         var filters = new FlowLayoutPanel
         {
             Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft, WrapContents = false,
-            AutoScroll = true, BackColor = Color.Transparent, Padding = new Padding(0, 3, 0, 3)
+            AutoScroll = true, BackColor = Color.FromArgb(9, 18, 34), Padding = new Padding(0, 3, 0, 3)
         };
         AddFilter(filters, "הכל", "all");
         AddFilter(filters, "★ מועדפים", "fav");
@@ -229,12 +229,12 @@ internal sealed class MainForm : Form
         _cardsPanel.AutoScroll = true;
         _cardsPanel.WrapContents = true;
         _cardsPanel.FlowDirection = FlowDirection.RightToLeft;
-        _cardsPanel.BackColor = Color.Transparent;
+        _cardsPanel.BackColor = Color.FromArgb(9, 18, 34);
         _cardsPanel.Padding = new Padding(8, 9, 8, 9);
 
         var ravPanel = new Panel
         {
-            Dock = DockStyle.Fill, BackColor = Color.FromArgb(238, 24, 18, 13),
+            Dock = DockStyle.Fill, BackColor = Color.FromArgb(18, 35, 58),
             Padding = new Padding(16, 7, 16, 7)
         };
         var ravTitle = new Label
@@ -246,7 +246,7 @@ internal sealed class MainForm : Form
         var ravButtons = new FlowLayoutPanel
         {
             Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft,
-            WrapContents = false, BackColor = Color.Transparent, Padding = new Padding(0, 2, 0, 0)
+            WrapContents = false, BackColor = Color.FromArgb(18, 35, 58), Padding = new Padding(0, 2, 0, 0)
         };
         _start.Text = "◈   טעינה באמצעות HopOn";
         StyleServiceButton(_start, Color.FromArgb(125, 83, 34));
@@ -366,16 +366,16 @@ internal sealed class MainForm : Form
         {
             var categoryColor = link.Category switch
             {
-                "tests" => Color.FromArgb(211, 164, 88),
-                "services" => Color.FromArgb(111, 173, 143),
-                _ => Color.FromArgb(160, 143, 203)
+                "tests" => Color.FromArgb(225, 190, 112),
+                "services" => Color.FromArgb(91, 176, 164),
+                _ => Color.FromArgb(132, 157, 220)
             };
             var card = new PremiumCardPanel
             {
                 Width = cardWidth, Height = 184, Margin = new Padding(10),
                 Cursor = Cursors.Hand, Tag = link, Padding = new Padding(17, 13, 17, 13),
-                GradientTop = Color.FromArgb(247, 36, 29, 23),
-                GradientBottom = Color.FromArgb(248, 20, 16, 13),
+                GradientTop = Color.FromArgb(28, 53, 82),
+                GradientBottom = Color.FromArgb(14, 28, 47),
                 BorderColor = Color.FromArgb(115, categoryColor),
                 HoverBorderColor = Color.FromArgb(235, categoryColor)
             };
@@ -499,6 +499,16 @@ internal sealed class MainForm : Form
         var cardWidth = Math.Clamp((availableWidth - (columns * 22)) / columns, 320, 470);
         foreach (Control control in _cardsPanel.Controls)
             if (control is PremiumCardPanel) control.Width = cardWidth;
+    }
+
+    private sealed class BufferedPanel : Panel
+    {
+        public BufferedPanel()
+        {
+            DoubleBuffered = true;
+            SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer |
+                     ControlStyles.ResizeRedraw, true);
+        }
     }
 
     private sealed class BufferedFlowLayoutPanel : FlowLayoutPanel
