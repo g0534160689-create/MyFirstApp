@@ -337,7 +337,7 @@ internal sealed class MainForm : Form
 
     private void AddFilter(FlowLayoutPanel host, string caption, string filter)
     {
-        var button = new Button { Text = caption, Width = 145, Height = 36, Margin = new Padding(5, 2, 5, 2), FlatStyle = FlatStyle.Flat, BackColor = Color.FromArgb(225, 24, 18, 14), ForeColor = Color.FromArgb(197, 184, 165), Font = new Font("Segoe UI", 10, FontStyle.Bold), Cursor = Cursors.Hand, UseVisualStyleBackColor = false, Tag = filter };
+        var button = new Button { Text = caption, Width = 145, Height = 36, Margin = new Padding(5, 2, 5, 2), FlatStyle = FlatStyle.Flat, BackColor = Color.FromArgb(23, 43, 68), ForeColor = Color.FromArgb(197, 184, 165), Font = new Font("Segoe UI", 10, FontStyle.Bold), Cursor = Cursors.Hand, UseVisualStyleBackColor = false, Tag = filter };
         button.FlatAppearance.BorderColor = Color.FromArgb(74, 111, 145);
         button.Click += (_, _) =>
         {
@@ -527,10 +527,10 @@ internal sealed class MainForm : Form
 
     private sealed class PremiumCardPanel : Panel
     {
-        public Color GradientTop = Color.FromArgb(40, 35, 28);
-        public Color GradientBottom = Color.FromArgb(20, 17, 14);
-        public Color BorderColor = Color.FromArgb(90, 200, 170, 110);
-        public Color HoverBorderColor = Color.FromArgb(240, 220, 180, 120);
+        public Color GradientTop = Color.FromArgb(28, 53, 82);
+        public Color GradientBottom = Color.FromArgb(14, 28, 47);
+        public Color BorderColor = Color.FromArgb(78, 115, 151);
+        public Color HoverBorderColor = Color.FromArgb(225, 190, 112);
         private bool _hovered;
 
         public PremiumCardPanel()
@@ -549,8 +549,8 @@ internal sealed class MainForm : Form
             var rect = new Rectangle(1, 1, Width - 3, Height - 3);
             using var path = RoundedRectangle(rect, 18);
             using var brush = new System.Drawing.Drawing2D.LinearGradientBrush(
-                rect, _hovered ? Color.FromArgb(255, 48, 38, 28) : GradientTop,
-                _hovered ? Color.FromArgb(255, 27, 21, 16) : GradientBottom, 90f);
+                rect, _hovered ? Color.FromArgb(36, 67, 100) : GradientTop,
+                _hovered ? Color.FromArgb(19, 39, 66) : GradientBottom, 90f);
             using var pen = new Pen(_hovered ? HoverBorderColor : BorderColor, _hovered ? 2.2f : 1.2f);
             e.Graphics.FillPath(brush, path);
             e.Graphics.DrawPath(pen, path);
