@@ -49,6 +49,7 @@ internal sealed class AppSettings
         if (!IsSecureHttpUri(uri)) return false;
 
         if (AdminPolicyStore.IsHostBlocked(uri.Host)) return false;
+        if (AdminPolicyStore.RouteDecision(uri) == true) return true;
         return uri.Host.Equals(AllowedHost, StringComparison.OrdinalIgnoreCase) ||
                uri.Host.Equals(RavKavHost, StringComparison.OrdinalIgnoreCase) ||
                (PortalAllowedHosts ?? []).Any(host =>
