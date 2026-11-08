@@ -23,7 +23,7 @@ internal sealed class MainForm : Form
     private readonly Button _back = new();
     private CoreWebView2Environment? _webViewEnvironment;
     private bool _browserInitialized;
-    private readonly string _backgroundImagePath = Path.Combine(AppContext.BaseDirectory, "Assets", "bg.jpg");
+    private readonly string? _backgroundImagePath = ResolveBackgroundImagePath();
     private BufferedPanel? _heroPanel;
     private PictureBox? _daatLogoBox;
     private PictureBox? _partnerLogoBox;
@@ -258,7 +258,22 @@ internal sealed class MainForm : Form
         _home.Controls.Add(layout);
         _cardsPanel.Resize += (_, _) => ResizeExistingCards();
         RenderCards();
-    }    private async Task LoadVisualAssetsAsync()
+    }    private static string? ResolveBackgroundImagePath()
+    {
+        // Support both the packaged Assets folder and a manually copied image
+        // beside the EXE or in the user's local application-data folder.
+        var candidates = new[]
+        {
+            Path.Combine(AppContext.BaseDirectory, "Assets", "bg.jpg"),
+            Path.Combine(AppContext.BaseDirectory, "bg.jpg"),
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "RavKavKiosk", "Assets", "bg.jpg")
+        };
+
+        return candidates.FirstOrDefault(File.Exists);
+    }
+
+    private async Task LoadVisualAssetsAsync()
     {
         var jobs = new List<Task<(string kind, Image? image)>>();
         if (File.Exists(_backgroundImagePath))
