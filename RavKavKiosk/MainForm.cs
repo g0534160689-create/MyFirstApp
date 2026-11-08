@@ -706,7 +706,11 @@ internal sealed class MainForm : Form
                         AppDiagnostics.Write("NavigationCompleted", error);
                         _status.Text = $"הטעינה נכשלה: {args.WebErrorStatus}";
                     }
-                    else _ = ApplyElementRulesAsync();
+                    else
+                    {
+                        _ = ApplyElementRulesAsync();
+                        if (_adminMode) _ = ApplyAdminModeToPageAsync();
+                    }
                 };
                 core.ProcessFailed += (_, args) =>
                 {
