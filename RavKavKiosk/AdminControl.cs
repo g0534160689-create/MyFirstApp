@@ -236,5 +236,9 @@ internal sealed class AdminManagerForm : Form
         foreach (var r in policy.Routes) rules.Items.Add($"{(r.Allowed ? "מאושר" : "חסום")} | {r.Host}{r.Path}");
         foreach (var e in policy.Elements) rules.Items.Add($"{(e.Allowed ? "מוצג" : "מוסתר")} | {e.Host} | {e.Selector}");
         foreach (var h in policy.AllowedHosts) rules.Items.Add($"דומיין מורשה | {h}");
+        foreach (var h in new[] { "hopon.co.il", "ravkavonline.co.il", "donors.matara.pro", "www.matara.pro", "matara.pro", "rishumon.net", "tora.irom.co.il" })
+            rules.Items.Add($"דומיין מורשה מובנה | {h}");
+        foreach (var path in AppSettings.Load().BlockedPaths)
+            rules.Items.Add($"חסום כברירת מחדל | https://hopon.co.il{path}");
     }
 }
