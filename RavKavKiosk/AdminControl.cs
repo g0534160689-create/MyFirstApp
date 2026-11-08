@@ -202,7 +202,7 @@ internal sealed class AdminManagerForm : Form
         host.Controls.Add(addHost); root.Controls.Add(host, 0, 2);
         root.Controls.Add(rules, 0, 3); root.Controls.Add(selected, 0, 4);
         var actions = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft };
-        var pick = new Button { Text = "בחירת רכיב מתוך האתר החי", Width = 190 }; pick.Click += (_, _) => { Hide(); PickElementRequested?.Invoke(); };
+        var pick = new Button { Text = "בחירת רכיב בלחיצה ימנית", Width = 190 }; pick.Click += (_, _) => { Hide(); PickElementRequested?.Invoke(); };
         var blockElement = new Button { Text = "חסום רכיב שנבחר", Width = 140 }; blockElement.Click += (_, _) => SaveSelectedElement(false);
         var allowElement = new Button { Text = "אפשר רכיב שנבחר", Width = 140 }; allowElement.Click += (_, _) => SaveSelectedElement(true);
         var remove = new Button { Text = "מחק כלל מסומן", Width = 120 }; remove.Click += (_, _) => RemoveSelected();
