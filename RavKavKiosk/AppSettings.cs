@@ -48,10 +48,13 @@ internal sealed class AppSettings
     {
         if (!IsSecureHttpUri(uri)) return false;
 
+        var adminDecision = AdminPolicyStore.RouteDecision(uri);
+        if (adminDecision.HasValue) return adminDecision.Value;
         return uri.Host.Equals(AllowedHost, StringComparison.OrdinalIgnoreCase) ||
                uri.Host.Equals(RavKavHost, StringComparison.OrdinalIgnoreCase) ||
                (PortalAllowedHosts ?? []).Any(host =>
-                   uri.Host.Equals(host, StringComparison.OrdinalIgnoreCase));
+                   uri.Host.Equals(host, StringComparison.OrdinalIgnoreCase)) ||
+               AdminPolicyStore.IsHostAllowed(uri.Host);
     }
 
     public bool IsHopOnUri(Uri uri) =>
@@ -67,6 +70,9 @@ internal sealed class AppSettings
     public bool IsBlockedNavigationUri(Uri uri)
     {
         if (!IsSecureHttpUri(uri)) return true;
+        var adminDecision = AdminPolicyStore.RouteDecision(uri);
+        if (adminDecision.HasValue) return !adminDecision.Value;
+        if (AdminPolicyStore.IsHostAllowed(uri.Host)) return false;
 
         if (IsRavKavUri(uri))
         {
