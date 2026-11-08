@@ -58,7 +58,7 @@ internal sealed class MainForm : Form
         {
             Text = "ישיבת דעת אהרן     ✦     המרכז הדיגיטלי", Dock = DockStyle.Right, Width = 560,
             ForeColor = Gold, Font = new Font("Segoe UI", 18, FontStyle.Bold),
-            TextAlign = ContentAlignment.MiddleRight
+            TextAlign = ContentAlignment.MiddleRight, BackColor = Color.FromArgb(19, 39, 66)
         };
         _back.Text = "חזרה למסך הראשי";
         _back.Dock = DockStyle.Left;
@@ -102,20 +102,20 @@ internal sealed class MainForm : Form
 
     private void BuildHome()
     {
-        _home.BackColor = Color.FromArgb(10, 7, 5);
+        _home.BackColor = Color.FromArgb(9, 18, 34);
         var layout = new TableLayoutPanel
         {
             Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 7,
-            Padding = new Padding(34, 16, 34, 16),
+            Padding = new Padding(42, 22, 42, 22),
             BackColor = Color.FromArgb(9, 18, 34)
         };
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 164));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 54));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 56));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 188));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 62));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 104));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 116));
 
         var meta = new BufferedPanel { Dock = DockStyle.Fill, BackColor = Color.FromArgb(9, 18, 34), Padding = new Padding(2) };
         var partnerHost = new BufferedPanel { Dock = DockStyle.Right, Width = 176, BackColor = Color.White, Padding = new Padding(8) };
@@ -127,7 +127,7 @@ internal sealed class MainForm : Form
         _dateClock.Dock = DockStyle.Left;
         _dateClock.Width = 330;
         _dateClock.ForeColor = Color.FromArgb(242, 231, 210);
-        _dateClock.BackColor = Color.FromArgb(205, 20, 15, 12);
+        _dateClock.BackColor = Color.FromArgb(19, 39, 66);
         _dateClock.Font = new Font("Segoe UI", 10, FontStyle.Bold);
         _dateClock.TextAlign = ContentAlignment.MiddleCenter;
         meta.Controls.Add(_dateClock);
@@ -145,7 +145,7 @@ internal sealed class MainForm : Form
         {
             Text = "ישיבת דעת אהרן", Dock = DockStyle.Fill,
             ForeColor = Color.FromArgb(255, 224, 157), Font = new Font("Segoe UI", 29, FontStyle.Bold),
-            TextAlign = ContentAlignment.BottomRight
+            TextAlign = ContentAlignment.BottomRight, BackColor = Color.FromArgb(19, 39, 66)
         }, 0, 0);
         heroText.Controls.Add(new Label
         {
@@ -157,7 +157,7 @@ internal sealed class MainForm : Form
         {
             Text = "בשיתוף מערכת אוצר החכמה  •  שע״י ישיבתנו הקדושה", Dock = DockStyle.Fill,
             ForeColor = Color.FromArgb(207, 184, 147), Font = new Font("Segoe UI", 10),
-            TextAlign = ContentAlignment.TopRight
+            TextAlign = ContentAlignment.TopRight, BackColor = Color.FromArgb(19, 39, 66)
         }, 0, 2);
 
         var logo = new PictureBox { Dock = DockStyle.Fill, SizeMode = PictureBoxSizeMode.Zoom, BackColor = Color.FromArgb(19, 39, 66), Padding = new Padding(10) };
@@ -227,11 +227,11 @@ internal sealed class MainForm : Form
             WrapContents = false, BackColor = Color.FromArgb(18, 35, 58), Padding = new Padding(0, 2, 0, 0)
         };
         _start.Text = "◈   טעינה באמצעות HopOn";
-        StyleServiceButton(_start, Color.FromArgb(125, 83, 34));
+        StyleServiceButton(_start, Color.FromArgb(153, 117, 53));
         _start.Width = 270; _start.Height = 43; _start.Margin = new Padding(8, 2, 8, 2);
         _start.Click += async (_, _) => await OpenOfficialServiceAsync(_settings.StartUrl, "HopOn");
         _ravKavStart.Text = "◈   טעינה באמצעות רב־קו אונליין";
-        StyleServiceButton(_ravKavStart, Color.FromArgb(91, 67, 37));
+        StyleServiceButton(_ravKavStart, Color.FromArgb(44, 91, 132));
         _ravKavStart.Width = 300; _ravKavStart.Height = 43; _ravKavStart.Margin = new Padding(8, 2, 8, 2);
         _ravKavStart.Click += async (_, _) => await OpenOfficialServiceAsync(_settings.RavKavStartUrl, "רב־קו אונליין");
         ravButtons.Controls.Add(_start);
@@ -338,14 +338,14 @@ internal sealed class MainForm : Form
     private void AddFilter(FlowLayoutPanel host, string caption, string filter)
     {
         var button = new Button { Text = caption, Width = 145, Height = 36, Margin = new Padding(5, 2, 5, 2), FlatStyle = FlatStyle.Flat, BackColor = Color.FromArgb(225, 24, 18, 14), ForeColor = Color.FromArgb(197, 184, 165), Font = new Font("Segoe UI", 10, FontStyle.Bold), Cursor = Cursors.Hand, UseVisualStyleBackColor = false, Tag = filter };
-        button.FlatAppearance.BorderColor = Color.FromArgb(95, 229, 184, 105);
+        button.FlatAppearance.BorderColor = Color.FromArgb(74, 111, 145);
         button.Click += (_, _) =>
         {
             _activeFilter = filter;
-            foreach (Control item in host.Controls) if (item is Button b) { bool selected = Equals(b.Tag, _activeFilter); b.ForeColor = selected ? Color.FromArgb(253, 230, 138) : Color.FromArgb(197, 184, 165); b.BackColor = selected ? Color.FromArgb(95, 116, 75, 30) : Color.FromArgb(225, 24, 18, 14); }
+            foreach (Control item in host.Controls) if (item is Button b) { bool selected = Equals(b.Tag, _activeFilter); b.ForeColor = selected ? Color.FromArgb(253, 230, 138) : Color.FromArgb(197, 184, 165); b.BackColor = selected ? Color.FromArgb(76, 91, 62) : Color.FromArgb(23, 43, 68); }
             RenderCards();
         };
-        if (filter == "all") { button.ForeColor = Color.FromArgb(253, 230, 138); button.BackColor = Color.FromArgb(95, 116, 75, 30); }
+        if (filter == "all") { button.ForeColor = Color.FromArgb(253, 230, 138); button.BackColor = Color.FromArgb(76, 91, 62); }
         host.Controls.Add(button);
     }
 
@@ -391,7 +391,7 @@ internal sealed class MainForm : Form
                 Text = link.Category switch { "tests" => "✧", "services" => "▣", _ => "▤" },
                 Dock = DockStyle.Right, Width = 62, ForeColor = Color.FromArgb(255, 224, 164),
                 Font = new Font("Segoe UI Symbol", 27, FontStyle.Bold),
-                TextAlign = ContentAlignment.MiddleCenter, BackColor = Color.FromArgb(42, categoryColor)
+                TextAlign = ContentAlignment.MiddleCenter, BackColor = Color.FromArgb(37, 66, 98)
             };
             var fav = new Button
             {
@@ -399,7 +399,7 @@ internal sealed class MainForm : Form
                 Text = _favorites.Contains(link.Id) ? "★" : "☆",
                 Dock = DockStyle.Left, Width = 42,
                 FlatStyle = FlatStyle.Flat, ForeColor = Color.FromArgb(255, 218, 125),
-                BackColor = Color.FromArgb(22, 255, 255, 255),
+                BackColor = Color.FromArgb(29, 48, 72),
                 Font = new Font("Segoe UI", 18, FontStyle.Bold), Cursor = Cursors.Hand,
                 UseVisualStyleBackColor = false
             };
@@ -411,32 +411,32 @@ internal sealed class MainForm : Form
                 ApplyCardFilter();
             };
 
-            var content = new Panel { Dock = DockStyle.Fill, BackColor = Color.Transparent, Padding = new Padding(12, 0, 10, 0) };
+            var content = new BufferedPanel { Dock = DockStyle.Fill, BackColor = Color.FromArgb(23, 43, 68), Padding = new Padding(12, 0, 10, 0) };
             var badge = new Label
             {
                 Text = "●  " + link.Badge.ToUpperInvariant(), Dock = DockStyle.Top, Height = 27,
                 ForeColor = categoryColor, Font = new Font("Segoe UI", 9, FontStyle.Bold),
-                TextAlign = ContentAlignment.MiddleRight
+                TextAlign = ContentAlignment.MiddleRight, BackColor = Color.FromArgb(23, 43, 68)
             };
             var title = new Label
             {
                 Text = link.Title, Dock = DockStyle.Top, Height = 42,
-                ForeColor = Color.FromArgb(255, 250, 239), Font = new Font("Segoe UI", 17, FontStyle.Bold),
-                TextAlign = ContentAlignment.MiddleRight, Cursor = Cursors.Hand
+                ForeColor = Color.FromArgb(255, 250, 239), Font = new Font("Segoe UI", 18, FontStyle.Bold),
+                TextAlign = ContentAlignment.MiddleRight, Cursor = Cursors.Hand, BackColor = Color.FromArgb(23, 43, 68)
             };
             var description = new Label
             {
                 Text = link.Subtitle, Dock = DockStyle.Top, Height = 38,
-                ForeColor = Color.FromArgb(198, 188, 171), Font = new Font("Segoe UI", 10),
-                TextAlign = ContentAlignment.TopRight, Cursor = Cursors.Hand
+                ForeColor = Color.FromArgb(188, 204, 221), Font = new Font("Segoe UI", 10),
+                TextAlign = ContentAlignment.TopRight, Cursor = Cursors.Hand, BackColor = Color.FromArgb(23, 43, 68)
             };
             var bottom = new Label
             {
                 Name = "entryCount",
                 Text = "כניסה לשירות  ←      " + _clickCounts.GetValueOrDefault(link.Id) + " כניסות",
                 Dock = DockStyle.Bottom, Height = 30,
-                ForeColor = Color.FromArgb(245, 207, 133), Font = new Font("Segoe UI", 9, FontStyle.Bold),
-                TextAlign = ContentAlignment.MiddleRight, Cursor = Cursors.Hand
+                ForeColor = Color.FromArgb(225, 190, 112), Font = new Font("Segoe UI", 9, FontStyle.Bold),
+                TextAlign = ContentAlignment.MiddleRight, Cursor = Cursors.Hand, BackColor = Color.FromArgb(23, 43, 68)
             };
             content.Controls.Add(bottom);
             content.Controls.Add(description);
@@ -467,7 +467,7 @@ internal sealed class MainForm : Form
             Text = "לא נמצאו תוצאות\r\nנסה לשנות את מילות החיפוש",
             Width = 520, Height = 120, ForeColor = Color.FromArgb(231, 215, 184),
             Font = new Font("Segoe UI", 15, FontStyle.Bold),
-            TextAlign = ContentAlignment.MiddleCenter, BackColor = Color.Transparent,
+            TextAlign = ContentAlignment.MiddleCenter, BackColor = Color.FromArgb(9, 18, 34),
             Visible = false
         };
         _cardsPanel.Controls.Add(_emptyState);
