@@ -18,6 +18,7 @@ internal sealed class MainForm : Form
     };
     private readonly Button _start = new();
     private readonly Button _ravKavStart = new();
+    private readonly Button _nedarimStart = new();
     private string _activeStartUrl = "https://hopon.co.il/read";
     private string _activeServiceName = "HopOn";
     private readonly Button _back = new();
@@ -105,12 +106,13 @@ internal sealed class MainForm : Form
         _home.BackColor = Color.FromArgb(9, 18, 34);
         var layout = new TableLayoutPanel
         {
-            Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 7,
+            Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 8,
             Padding = new Padding(42, 22, 42, 22),
             BackColor = Color.FromArgb(9, 18, 34)
         };
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 56));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 188));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 66));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 62));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
@@ -132,12 +134,12 @@ internal sealed class MainForm : Form
         _dateClock.TextAlign = ContentAlignment.MiddleCenter;
         meta.Controls.Add(_dateClock);
 
-        var hero = new BufferedPanel { Dock = DockStyle.Fill, BackColor = Color.FromArgb(19, 39, 66), Padding = new Padding(28, 16, 28, 16) };
+        var hero = new BufferedPanel { Dock = DockStyle.Fill, BackColor = Color.Transparent, Padding = new Padding(28, 16, 28, 16) };
         _heroPanel = hero;
-        var heroLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1, BackColor = Color.FromArgb(19, 39, 66) };
+        var heroLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1, BackColor = Color.Transparent };
         heroLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         heroLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 170));
-        var heroText = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3, BackColor = Color.FromArgb(19, 39, 66) };
+        var heroText = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3, BackColor = Color.Transparent };
         heroText.RowStyles.Add(new RowStyle(SizeType.Percent, 44));
         heroText.RowStyles.Add(new RowStyle(SizeType.Percent, 30));
         heroText.RowStyles.Add(new RowStyle(SizeType.Percent, 26));
@@ -167,6 +169,14 @@ internal sealed class MainForm : Form
         heroLayout.Controls.Add(logo, 1, 0);
         hero.Controls.Add(heroLayout);
 
+        var nedarimPanel = new BufferedPanel { Dock = DockStyle.Fill, BackColor = Color.Transparent };
+        _nedarimStart.Text = "✦   כניסה לקופת נדרים פלוס   ✦";
+        StyleServiceButton(_nedarimStart, Color.FromArgb(128, 91, 37));
+        _nedarimStart.Width = 420; _nedarimStart.Height = 50; _nedarimStart.Anchor = AnchorStyles.None;
+        _nedarimStart.Click += async (_, _) => await OpenOfficialServiceAsync(_settings.NedarimStartUrl, "נדרים פלוס");
+        nedarimPanel.Controls.Add(_nedarimStart);
+        nedarimPanel.Resize += (_, _) => _nedarimStart.Location = new Point((nedarimPanel.ClientSize.Width - _nedarimStart.Width) / 2, (nedarimPanel.ClientSize.Height - _nedarimStart.Height) / 2);
+
         var sectionTitle = new Label
         {
             Text = "המרכז הדיגיטלי של הישיבה     |     כל השירותים והקישורים במקום אחד",
@@ -195,7 +205,7 @@ internal sealed class MainForm : Form
         var filters = new FlowLayoutPanel
         {
             Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft, WrapContents = false,
-            AutoScroll = true, BackColor = Color.FromArgb(9, 18, 34), Padding = new Padding(0, 3, 0, 3)
+            AutoScroll = true, BackColor = Color.Transparent, Padding = new Padding(0, 3, 0, 3)
         };
         AddFilter(filters, "הכל", "all");
         AddFilter(filters, "★ מועדפים", "fav");
@@ -207,7 +217,7 @@ internal sealed class MainForm : Form
         _cardsPanel.AutoScroll = true;
         _cardsPanel.WrapContents = true;
         _cardsPanel.FlowDirection = FlowDirection.RightToLeft;
-        _cardsPanel.BackColor = Color.FromArgb(9, 18, 34);
+        _cardsPanel.BackColor = Color.Transparent;
         _cardsPanel.Padding = new Padding(8, 9, 8, 9);
 
         var ravPanel = new Panel
@@ -241,11 +251,12 @@ internal sealed class MainForm : Form
 
         layout.Controls.Add(meta, 0, 0);
         layout.Controls.Add(hero, 0, 1);
-        layout.Controls.Add(sectionTitle, 0, 2);
-        layout.Controls.Add(searchHost, 0, 3);
-        layout.Controls.Add(filters, 0, 4);
-        layout.Controls.Add(_cardsPanel, 0, 5);
-        layout.Controls.Add(ravPanel, 0, 6);
+        layout.Controls.Add(nedarimPanel, 0, 2);
+        layout.Controls.Add(sectionTitle, 0, 3);
+        layout.Controls.Add(searchHost, 0, 4);
+        layout.Controls.Add(filters, 0, 5);
+        layout.Controls.Add(_cardsPanel, 0, 6);
+        layout.Controls.Add(ravPanel, 0, 7);
         _home.Controls.Add(layout);
         _cardsPanel.Resize += (_, _) => ResizeExistingCards();
         RenderCards();
@@ -276,9 +287,9 @@ internal sealed class MainForm : Form
                 PictureBox? target = kind switch { "partner" => _partnerLogoBox, "daat" => _daatLogoBox, _ => null };
                 if (kind == "background" && _heroPanel is not null)
                 {
-                    var previous = _heroPanel.BackgroundImage;
-                    _heroPanel.BackgroundImage = image;
-                    _heroPanel.BackgroundImageLayout = ImageLayout.Stretch;
+                    var previous = BackgroundImage;
+                    BackgroundImage = image;
+                    BackgroundImageLayout = ImageLayout.Stretch;
                     previous?.Dispose();
                 }
                 else if (target is not null)
@@ -634,6 +645,10 @@ internal sealed class MainForm : Form
                     CoreWebView2WebResourceContext.Document,
                     CoreWebView2WebResourceRequestSourceKinds.All);
                 core.AddWebResourceRequestedFilter(
+                    "https://www.matara.pro/*", CoreWebView2WebResourceContext.Document, CoreWebView2WebResourceRequestSourceKinds.All);
+                core.AddWebResourceRequestedFilter(
+                    "https://matara.pro/*", CoreWebView2WebResourceContext.Document, CoreWebView2WebResourceRequestSourceKinds.All);
+                core.AddWebResourceRequestedFilter(
                     "https://ravkavonline.co.il/*",
                     CoreWebView2WebResourceContext.Document,
                     CoreWebView2WebResourceRequestSourceKinds.All);
@@ -641,6 +656,7 @@ internal sealed class MainForm : Form
 
                 await core.AddScriptToExecuteOnDocumentCreatedAsync(BuildRouteGuardScript(_settings.StartUrl));
                 await core.AddScriptToExecuteOnDocumentCreatedAsync(BuildRouteGuardScript(_settings.RavKavStartUrl));
+                await core.AddScriptToExecuteOnDocumentCreatedAsync(BuildRouteGuardScript(_settings.NedarimStartUrl));
                 core.DownloadStarting += (_, args) => args.Cancel = true;
                 core.LaunchingExternalUriScheme += OnLaunchingExternalUriScheme;
                 core.PermissionRequested += (_, args) => args.State = CoreWebView2PermissionState.Deny;
@@ -650,7 +666,7 @@ internal sealed class MainForm : Form
                     if (_browser.CoreWebView2 is not null &&
                         Uri.TryCreate(_browser.CoreWebView2.Source, UriKind.Absolute, out var current) &&
                         _settings.IsAllowedNavigationUri(current) &&
-                        !_settings.IsBlockedNavigationUri(current))
+                        !IsBlockedForCurrentMode(current))
                         _status.Text = $"שירות {_activeServiceName}";
                 };
                 core.NavigationCompleted += (_, args) =>
@@ -675,7 +691,7 @@ internal sealed class MainForm : Form
 
             if (!Uri.TryCreate(startUrl, UriKind.Absolute, out var start) ||
                 !_settings.IsAllowedNavigationUri(start) ||
-                _settings.IsBlockedNavigationUri(start))
+                IsBlockedForCurrentMode(start))
                 throw new InvalidOperationException("כתובת השירות אינה מאושרת בהגדרות.");
 
             _browser.CoreWebView2.Navigate(start.ToString());
@@ -701,6 +717,8 @@ internal sealed class MainForm : Form
         }
     }
 
+    private bool IsBlockedForCurrentMode(Uri uri) => _settings.IsBlockedNavigationUri(uri, strictNedarimPlus: _activeServiceName == "נדרים פלוס");
+
     private void EnforceCurrentPage()
     {
         if (_browser.CoreWebView2 is null) return;
@@ -718,9 +736,10 @@ internal sealed class MainForm : Form
         var serviceUri = new Uri(serviceStartUrl);
         var origin = serviceUri.GetLeftPart(UriPartial.Authority);
         var originJson = JsonSerializer.Serialize(origin);
-        var strictPath = _settings.IsRavKavUri(serviceUri);
+        var strictPath = _settings.IsRavKavUri(serviceUri) || _settings.IsNedarimPlusUri(serviceUri);
         var strictPathJson = JsonSerializer.Serialize(strictPath);
-        var allowedPathJson = JsonSerializer.Serialize(_settings.RavKavAllowedPath);
+        var allowedPaths = _settings.IsRavKavUri(serviceUri) ? new[] { _settings.RavKavAllowedPath } : (_settings.IsNedarimPlusUri(serviceUri) ? _settings.NedarimAllowedPaths : Array.Empty<string>());
+        var allowedPathsJson = JsonSerializer.Serialize(allowedPaths);
         var blockedPathsJson = JsonSerializer.Serialize(_settings.BlockedPaths);
 
         var script = """
@@ -729,7 +748,7 @@ internal sealed class MainForm : Form
             if (window.top !== window) return;
             const allowedOrigin = __ALLOWED_ORIGIN_JSON__;
             const strictPath = __STRICT_PATH__;
-            const allowedPath = __ALLOWED_PATH_JSON__;
+            const allowedPaths = __ALLOWED_PATHS_JSON__.map(p => String(p).toLowerCase().replace(/\\/+$/g, "") || "/");
             const blockedRoots = __BLOCKED_PATHS_JSON__.map(p =>
                 String(p).replace(/\\/g, "/").replace(/\/+$/g, "").toLowerCase()
             );
@@ -766,7 +785,7 @@ internal sealed class MainForm : Form
                 const path = normalizedPath(value);
                 if (path === "__BLOCK_INVALID__") return true;
                 if (path === null) return false;
-                if (strictPath) return path !== allowedPath.toLowerCase();
+                if (strictPath) return !allowedPaths.includes(path);
                 return blockedRoots.some(root =>
                     path === root ||
                     path.startsWith(root + "/") ||
@@ -784,7 +803,7 @@ internal sealed class MainForm : Form
             for (const method of ["pushState", "replaceState"]) {
                 const original = history[method];
                 history[method] = function(state, title, url) {
-                    if (!strictPath && url != null && isBlocked(url)) {
+                    if (url != null && isBlocked(url)) {
                         notifyBlocked();
                         return;
                     }
@@ -806,7 +825,7 @@ internal sealed class MainForm : Form
 
             document.addEventListener("submit", event => {
                 const form = event.target;
-                if (!strictPath && form instanceof HTMLFormElement && isBlocked(form.action)) {
+                if (form instanceof HTMLFormElement && isBlocked(form.action)) {
                     event.preventDefault();
                     event.stopImmediatePropagation();
                     event.stopPropagation();
@@ -816,7 +835,7 @@ internal sealed class MainForm : Form
 
             // Defensive fallback for a blocked entry already present in history.
             window.addEventListener("popstate", () => {
-                if (!strictPath && isBlocked(location.href)) {
+                if (isBlocked(location.href)) {
                     history.forward();
                     notifyBlocked();
                 }
@@ -827,7 +846,7 @@ internal sealed class MainForm : Form
         return script
             .Replace("__ALLOWED_ORIGIN_JSON__", originJson, StringComparison.Ordinal)
             .Replace("__STRICT_PATH__", strictPathJson, StringComparison.Ordinal)
-            .Replace("__ALLOWED_PATH_JSON__", allowedPathJson, StringComparison.Ordinal)
+            .Replace("__ALLOWED_PATHS_JSON__", allowedPathsJson, StringComparison.Ordinal)
             .Replace("__BLOCKED_PATHS_JSON__", blockedPathsJson, StringComparison.Ordinal);
     }
 
@@ -835,7 +854,7 @@ internal sealed class MainForm : Form
     {
         if (!Uri.TryCreate(e.Uri, UriKind.Absolute, out var target) ||
             !_settings.IsAllowedNavigationUri(target) ||
-            _settings.IsBlockedNavigationUri(target))
+            IsBlockedForCurrentMode(target))
         {
             e.Cancel = true;
             _status.Text = "העמוד המבוקש חסום בעמדה זו.";
@@ -846,7 +865,7 @@ internal sealed class MainForm : Form
     {
         if (!Uri.TryCreate(e.Request.Uri, UriKind.Absolute, out var target) ||
             !_settings.IsAllowedNavigationUri(target) ||
-            !_settings.IsBlockedNavigationUri(target))
+            !IsBlockedForCurrentMode(target))
             return;
 
         // A second network-level barrier: never pass a blocked HTML document to Chromium.
