@@ -21,6 +21,9 @@ internal sealed class MainForm : Form
     private string _activeStartUrl = "https://hopon.co.il/read";
     private string _activeServiceName = "HopOn";
     private readonly Button _back = new();
+    private readonly Button _adminButton = new() { Text = "⚙ ניהול מערכת", Width = 150, Height = 38, Dock = DockStyle.Left };
+    private AdminManagerForm? _adminManager;
+    private bool _elementPicking;
     private CoreWebView2Environment? _webViewEnvironment;
     private bool _browserInitialized;
     private readonly string? _backgroundImagePath = ResolveBackgroundImagePath();
@@ -70,6 +73,14 @@ internal sealed class MainForm : Form
         _back.Visible = false;
         _back.Click += (_, _) => ShowHome();
         header.Controls.Add(brand);
+        _adminButton.FlatStyle = FlatStyle.Flat;
+        _adminButton.FlatAppearance.BorderColor = Color.FromArgb(100, 150, 190);
+        _adminButton.ForeColor = Color.FromArgb(255, 224, 157);
+        _adminButton.BackColor = Navy;
+        _adminButton.Font = new Font("Segoe UI", 9, FontStyle.Bold);
+        _adminButton.Cursor = Cursors.Hand;
+        _adminButton.Click += (_, _) => OpenAdminManager();
+        header.Controls.Add(_adminButton);
         header.Controls.Add(_back);
 
         var footer = new BufferedPanel { Dock = DockStyle.Bottom, Height = 32, BackColor = Color.FromArgb(12, 22, 38), Padding = new Padding(12, 0, 12, 0) };
@@ -652,6 +663,7 @@ internal sealed class MainForm : Form
                 core.Settings.AreBrowserAcceleratorKeysEnabled = false;
                 // Install every blocking layer before the first page navigation.
                 core.NavigationStarting += OnNavigationStarting;
+                core.WebMessageReceived += OnWebMessageReceived;
                 core.FrameNavigationStarting += OnFrameNavigationStarting;
                 core.HistoryChanged += (_, _) => EnforceCurrentPage();
                 core.NewWindowRequested += OnNewWindowRequested;
@@ -689,6 +701,7 @@ internal sealed class MainForm : Form
                         AppDiagnostics.Write("NavigationCompleted", error);
                         _status.Text = $"הטעינה נכשלה: {args.WebErrorStatus}";
                     }
+                    else _ = ApplyElementRulesAsync();
                 };
                 core.ProcessFailed += (_, args) =>
                 {
@@ -726,6 +739,100 @@ internal sealed class MainForm : Form
             _start.Enabled = true;
             _ravKavStart.Enabled = true;
         }
+    }
+
+    private void OpenAdminManager()
+    {
+        if (!AdminAuthentication.Authenticate(this)) return;
+        if (_adminManager is not null && !_adminManager.IsDisposed) { _adminManager.Show(); _adminManager.Activate(); return; }
+        var currentUrl = _browserInitialized && Uri.TryCreate(_browser.CoreWebView2?.Source, UriKind.Absolute, out var current)
+            ? current.ToString() : "https://hopon.co.il/read";
+        _adminManager = new AdminManagerForm(currentUrl);
+        _adminManager.PickElementRequested += StartElementPicker;
+        _adminManager.RulesChanged += () => _ = ApplyElementRulesAsync();
+        _adminManager.FormClosed += (_, _) => _adminManager = null;
+        _adminManager.Show(this);
+    }
+
+    private async void StartElementPicker()
+    {
+        if (!_browserInitialized || !_browser.Visible)
+        { MessageBox.Show(this, "כדי לבחור רכיב, פתח תחילה אתר בתוך התוכנה."); _adminManager?.Show(); return; }
+        _elementPicking = true;
+        const string script = """
+        (() => {
+          if (window.__kioskPickerInstalled) return;
+          window.__kioskPickerInstalled = true;
+          let previous = null;
+          const selectorFor = el => {
+            if (el.id) return "#" + CSS.escape(el.id);
+            const parts = [];
+            while (el && el.nodeType === 1 && el !== document.documentElement) {
+              let part = el.tagName.toLowerCase();
+              if (el.classList.length) part += "." + [...el.classList].slice(0,2).map(c => CSS.escape(c)).join(".");
+              else {
+                const siblings = el.parentElement ? [...el.parentElement.children].filter(x => x.tagName === el.tagName) : [];
+                if (siblings.length > 1) part += ":nth-of-type(" + (siblings.indexOf(el)+1) + ")";
+              }
+              parts.unshift(part); if (parts.length >= 5) break; el = el.parentElement;
+            }
+            return parts.join(" > ");
+          };
+          const move = e => {
+            if (previous) previous.style.outline = previous.__kioskOldOutline || "";
+            previous = e.target instanceof Element ? e.target : null;
+            if (previous) { previous.__kioskOldOutline = previous.style.outline; previous.style.outline = "3px solid #f0b84b"; }
+          };
+          const click = e => {
+            const el = e.target instanceof Element ? e.target : null; if (!el) return;
+            e.preventDefault(); e.stopImmediatePropagation(); e.stopPropagation();
+            const selector = selectorFor(el);
+            if (previous) previous.style.outline = previous.__kioskOldOutline || "";
+            document.removeEventListener("mousemove", move, true); document.removeEventListener("click", click, true);
+            window.__kioskPickerInstalled = false; document.body.style.cursor = "";
+            chrome.webview.postMessage({type:"element-picked", selector});
+          };
+          document.body.style.cursor = "crosshair";
+          document.addEventListener("mousemove", move, true); document.addEventListener("click", click, true);
+        })();
+        """;
+        try { await _browser.CoreWebView2.ExecuteScriptAsync(script); }
+        catch (Exception ex) { AppDiagnostics.Write("Start element picker", ex); _elementPicking = false; }
+    }
+
+    private void OnWebMessageReceived(object? sender, CoreWebView2WebMessageReceivedEventArgs e)
+    {
+        if (!_elementPicking) return;
+        try
+        {
+            using var doc = JsonDocument.Parse(e.WebMessageAsJson);
+            if (doc.RootElement.GetProperty("type").GetString() != "element-picked") return;
+            var selector = doc.RootElement.GetProperty("selector").GetString();
+            if (string.IsNullOrWhiteSpace(selector)) return;
+            _elementPicking = false; _adminManager?.ReceivePickedSelector(selector);
+        }
+        catch (Exception ex) { AppDiagnostics.Write("Read selected page element", ex); }
+    }
+
+    private async Task ApplyElementRulesAsync()
+    {
+        if (!_browserInitialized || _browser.CoreWebView2 is null) return;
+        if (!Uri.TryCreate(_browser.CoreWebView2.Source, UriKind.Absolute, out var uri)) return;
+        var rules = AdminPolicyStore.ElementRules(uri.Host).Where(r => !r.Allowed).Select(r => r.Selector).ToArray();
+        var json = JsonSerializer.Serialize(rules);
+        var script = """
+        (() => {
+          const id = "__ravkav_admin_element_rules";
+          document.getElementById(id)?.remove();
+          const rules = __RULES__;
+          if (!rules.length) return;
+          const style = document.createElement("style"); style.id = id;
+          style.textContent = rules.map(s => s + " { display:none !important; visibility:hidden !important; }").join("\\n");
+          (document.head || document.documentElement).appendChild(style);
+        })();
+        """.Replace("__RULES__", json, StringComparison.Ordinal);
+        try { await _browser.CoreWebView2.ExecuteScriptAsync(script); }
+        catch (Exception ex) { AppDiagnostics.Write("Apply admin element rules", ex); }
     }
 
     private void EnforceCurrentPage()
