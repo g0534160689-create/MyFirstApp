@@ -693,8 +693,8 @@ internal sealed class MainForm : Form
                     EnforceCurrentPage();
                     if (_browser.CoreWebView2 is not null &&
                         Uri.TryCreate(_browser.CoreWebView2.Source, UriKind.Absolute, out var current) &&
-                        _settings.IsAllowedNavigationUri(current) &&
-                        !_settings.IsBlockedNavigationUri(current))
+                        IsAllowedNavigationUri(current) &&
+                        !IsBlockedNavigationUri(current))
                         _status.Text = $"שירות {_activeServiceName}";
                 };
                 core.NavigationCompleted += (_, args) =>
@@ -719,8 +719,8 @@ internal sealed class MainForm : Form
             }
 
             if (!Uri.TryCreate(startUrl, UriKind.Absolute, out var start) ||
-                !_settings.IsAllowedNavigationUri(start) ||
-                _settings.IsBlockedNavigationUri(start))
+                !IsAllowedNavigationUri(start) ||
+                IsBlockedNavigationUri(start))
                 throw new InvalidOperationException("כתובת השירות אינה מאושרת בהגדרות.");
 
             _browser.CoreWebView2.Navigate(start.ToString());
@@ -746,6 +746,30 @@ internal sealed class MainForm : Form
         }
     }
 
+    // Temporary, session-only override for inspecting routes blocked by normal kiosk policy.
+    private bool _adminMode;
+    private bool IsAllowedNavigationUri(Uri uri) => _adminMode
+        ? uri.IsAbsoluteUri && uri.Scheme == Uri.UriSchemeHttps && uri.IsDefaultPort && string.IsNullOrEmpty(uri.UserInfo)
+        : _settings.IsAllowedNavigationUri(uri);
+    private bool IsBlockedNavigationUri(Uri uri) => _adminMode ? false : _settings.IsBlockedNavigationUri(uri);
+    private void SetAdminMode(bool enabled)
+    {
+        _adminMode = enabled;
+        _status.Text = enabled ? "מצב מנהל פעיל — ניווט HTTPS פתוח זמנית" : "מצב מנהל כבוי — החסימות הרגילות פעילות";
+        _ = ApplyAdminModeToPageAsync();
+        if (!enabled) EnforceCurrentPage();
+    }
+    private async Task ApplyAdminModeToPageAsync()
+    {
+        if (!_browserInitialized || _browser.CoreWebView2 is null) return;
+        try
+        {
+            await _browser.CoreWebView2.ExecuteScriptAsync("window.__kioskAdminMode = " + (_adminMode ? "true" : "false") + ";");
+            await ApplyRouteRulesAsync();
+        }
+        catch (Exception ex) { AppDiagnostics.Write("Toggle administrator mode", ex); }
+    }
+
     private void OpenAdminManager()
     {
         if (!AdminAuthentication.Authenticate(this)) return;
@@ -756,7 +780,8 @@ internal sealed class MainForm : Form
         _adminManager.PickElementRequested += StartElementPicker;
         _adminManager.ScanLinksRequested += ScanCurrentPageLinks;
         _adminManager.RulesChanged += () => { _ = ApplyElementRulesAsync(); _ = ApplyRouteRulesAsync(); };
-        _adminManager.FormClosed += (_, _) => _adminManager = null;
+        _adminManager.AdminModeChanged += SetAdminMode;
+        _adminManager.FormClosed += (_, _) => { _adminManager = null; SetAdminMode(false); };
         _adminManager.Show(this);
     }
 
@@ -790,7 +815,7 @@ internal sealed class MainForm : Form
             if (previous) { previous.__kioskOldOutline = previous.style.outline; previous.style.outline = "3px solid #f0b84b"; }
           };
           const pick = e => {
-            if (e.button !== 2) return;
+            if (e.button !== 0) return;
             const el = e.target instanceof Element ? e.target : null; if (!el) return;
             e.preventDefault(); e.stopImmediatePropagation(); e.stopPropagation();
             const selector = selectorFor(el);
@@ -798,12 +823,12 @@ internal sealed class MainForm : Form
             const href = el.closest("a[href]")?.href || "";
             const label = (el.innerText || el.getAttribute("aria-label") || el.getAttribute("title") || "").trim().slice(0,120);
             if (previous) previous.style.outline = previous.__kioskOldOutline || "";
-            document.removeEventListener("mousemove", move, true); document.removeEventListener("contextmenu", pick, true);
+            document.removeEventListener("mousemove", move, true); document.removeEventListener("click", pick, true);
             window.__kioskPickerInstalled = false; document.body.style.cursor = "";
             chrome.webview.postMessage({type:"element-picked", selector, tag, href, label});
           };
           document.body.style.cursor = "crosshair";
-          document.addEventListener("mousemove", move, true); document.addEventListener("contextmenu", pick, true);
+          document.addEventListener("mousemove", move, true); document.addEventListener("click", pick, true);
         })();
         """;
         try { await _browser.CoreWebView2.ExecuteScriptAsync(script); }
@@ -824,7 +849,7 @@ internal sealed class MainForm : Form
                     var urlText = item.GetProperty("url").GetString() ?? "";
                     if (!Uri.TryCreate(urlText, UriKind.Absolute, out var linkUri) || linkUri.Scheme != Uri.UriSchemeHttps) continue;
                     var labelText = item.TryGetProperty("text", out var textValue) ? textValue.GetString() ?? "" : "";
-                    var blocked = !_settings.IsAllowedNavigationUri(linkUri) || _settings.IsBlockedNavigationUri(linkUri);
+                    var blocked = !IsAllowedNavigationUri(linkUri) || IsBlockedNavigationUri(linkUri);
                     links.Add((urlText, string.IsNullOrWhiteSpace(labelText) ? "(ללא כותרת)" : labelText, blocked));
                 }
                 _adminManager?.ReceiveScannedLinks(links);
@@ -900,8 +925,8 @@ internal sealed class MainForm : Form
     {
         if (_browser.CoreWebView2 is null) return;
         if (!Uri.TryCreate(_browser.CoreWebView2.Source, UriKind.Absolute, out var current) ||
-            !_settings.IsAllowedNavigationUri(current) ||
-            _settings.IsBlockedNavigationUri(current))
+            !IsAllowedNavigationUri(current) ||
+            IsBlockedNavigationUri(current))
         {
             _status.Text = "העמוד הזה אינו זמין בעמדת הטעינה.";
             _browser.CoreWebView2.Navigate(_activeStartUrl);
@@ -932,6 +957,7 @@ internal sealed class MainForm : Form
                 String(p).replace(/\\/g, "/").replace(/\/+$/g, "").toLowerCase()
             );
             window.__kioskAdminRules = __ADMIN_RULES_JSON__;
+            window.__kioskAdminMode = false;
 
             function normalizedPath(value) {
                 try {
@@ -962,6 +988,7 @@ internal sealed class MainForm : Form
             }
 
             function isBlocked(value) {
+                if (window.__kioskAdminMode === true) return false;
                 const path = normalizedPath(value);
                 if (path === "__BLOCK_INVALID__") return true;
                 if (path === null) return false;
@@ -1038,8 +1065,8 @@ internal sealed class MainForm : Form
     private void OnFrameNavigationStarting(object? sender, CoreWebView2NavigationStartingEventArgs e)
     {
         if (!Uri.TryCreate(e.Uri, UriKind.Absolute, out var target) ||
-            !_settings.IsAllowedNavigationUri(target) ||
-            _settings.IsBlockedNavigationUri(target))
+            !IsAllowedNavigationUri(target) ||
+            IsBlockedNavigationUri(target))
         {
             e.Cancel = true;
             _status.Text = "העמוד המבוקש חסום בעמדה זו.";
@@ -1049,8 +1076,8 @@ internal sealed class MainForm : Form
     private void OnWebResourceRequested(object? sender, CoreWebView2WebResourceRequestedEventArgs e)
     {
         if (!Uri.TryCreate(e.Request.Uri, UriKind.Absolute, out var target) ||
-            !_settings.IsAllowedNavigationUri(target) ||
-            !_settings.IsBlockedNavigationUri(target))
+            !IsAllowedNavigationUri(target) ||
+            !IsBlockedNavigationUri(target))
             return;
 
         // A second network-level barrier: never pass a blocked HTML document to Chromium.
@@ -1072,8 +1099,8 @@ internal sealed class MainForm : Form
     private void OnNavigationStarting(object? sender, CoreWebView2NavigationStartingEventArgs e)
     {
         if (!Uri.TryCreate(e.Uri, UriKind.Absolute, out var target) ||
-            !_settings.IsAllowedNavigationUri(target) ||
-            _settings.IsBlockedNavigationUri(target))
+            !IsAllowedNavigationUri(target) ||
+            IsBlockedNavigationUri(target))
         {
             e.Cancel = true;
             _status.Text = "העמוד המבוקש חסום בעמדה זו.";
@@ -1084,8 +1111,8 @@ internal sealed class MainForm : Form
     {
         e.Handled = true;
         if (Uri.TryCreate(e.Uri, UriKind.Absolute, out var target) &&
-            _settings.IsAllowedNavigationUri(target) &&
-            !_settings.IsBlockedNavigationUri(target))
+            IsAllowedNavigationUri(target) &&
+            !IsBlockedNavigationUri(target))
             _browser.CoreWebView2.Navigate(target.ToString());
         else
             _status.Text = "חלון חיצוני נחסם.";
