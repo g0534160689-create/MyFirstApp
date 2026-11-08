@@ -808,7 +808,8 @@ internal sealed class MainForm : Form
             using var doc = JsonDocument.Parse(e.WebMessageAsJson);
             if (doc.RootElement.GetProperty("type").GetString() != "element-picked") return;
             var selector = doc.RootElement.GetProperty("selector").GetString();
-            if (string.IsNullOrWhiteSpace(selector)) return;
+            if (string.IsNullOrWhiteSpace(selector) || selector.Length > 500 ||
+                !System.Text.RegularExpressions.Regex.IsMatch(selector, @"^[A-Za-z0-9#._\\: >()\-]+$")) return;
             _elementPicking = false; _adminManager?.ReceivePickedSelector(selector);
         }
         catch (Exception ex) { AppDiagnostics.Write("Read selected page element", ex); }
