@@ -753,7 +753,7 @@ internal sealed class MainForm : Form
         _adminManager = new AdminManagerForm(currentUrl);
         _adminManager.PickElementRequested += StartElementPicker;
         _adminManager.ScanLinksRequested += ScanCurrentPageLinks;
-        _adminManager.RulesChanged += () => _ = ApplyElementRulesAsync();
+        _adminManager.RulesChanged += () => { _ = ApplyElementRulesAsync(); _ = ApplyRouteRulesAsync(); };
         _adminManager.FormClosed += (_, _) => _adminManager = null;
         _adminManager.Show(this);
     }
@@ -861,6 +861,18 @@ internal sealed class MainForm : Form
         catch (Exception ex) { AppDiagnostics.Write("Scan page links", ex); MessageBox.Show(this, "סריקת הקישורים נכשלה."); }
     }
 
+    private async Task ApplyRouteRulesAsync()
+    {
+        if (!_browserInitialized || _browser.CoreWebView2 is null ||
+            !Uri.TryCreate(_browser.CoreWebView2.Source, UriKind.Absolute, out var uri)) return;
+        var rules = AdminPolicyStore.Load().Routes
+            .Where(r => r.Host.Equals(uri.Host, StringComparison.OrdinalIgnoreCase))
+            .Select(r => new { path = r.Path == "/" ? "/" : r.Path.TrimEnd('/').ToLowerInvariant(), allowed = r.Allowed });
+        var json = JsonSerializer.Serialize(rules);
+        try { await _browser.CoreWebView2.ExecuteScriptAsync("window.__kioskAdminRules = " + json + ";"); }
+        catch (Exception ex) { AppDiagnostics.Write("Apply admin route rules", ex); }
+    }
+
     private async Task ApplyElementRulesAsync()
     {
         if (!_browserInitialized || _browser.CoreWebView2 is null) return;
@@ -917,7 +929,7 @@ internal sealed class MainForm : Form
             const blockedRoots = __BLOCKED_PATHS_JSON__.map(p =>
                 String(p).replace(/\\/g, "/").replace(/\/+$/g, "").toLowerCase()
             );
-            const adminRules = __ADMIN_RULES_JSON__;
+            window.__kioskAdminRules = __ADMIN_RULES_JSON__;
 
             function normalizedPath(value) {
                 try {
@@ -951,7 +963,7 @@ internal sealed class MainForm : Form
                 const path = normalizedPath(value);
                 if (path === "__BLOCK_INVALID__") return true;
                 if (path === null) return false;
-                const matchingRules = adminRules
+                const matchingRules = (window.__kioskAdminRules || [])
                     .filter(rule => rule.path === "/" || path === rule.path || path.startsWith(rule.path + "/"))
                     .sort((a, b) => b.path.length - a.path.length);
                 if (matchingRules.length) return !matchingRules[0].allowed;
