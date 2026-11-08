@@ -866,7 +866,8 @@ internal sealed class MainForm : Form
             var tag = doc.RootElement.TryGetProperty("tag", out var tagValue) ? tagValue.GetString() : "";
             var href = doc.RootElement.TryGetProperty("href", out var hrefValue) ? hrefValue.GetString() : "";
             var label = doc.RootElement.TryGetProperty("label", out var labelValue) ? labelValue.GetString() : "";
-            _elementPicking = false; _adminManager?.ReceivePickedSelector(selector, tag ?? "", href ?? "", label ?? "");
+            var pickedHost = Uri.TryCreate(_browser.CoreWebView2?.Source, UriKind.Absolute, out var pickedUri) ? pickedUri.Host : "";
+            _elementPicking = false; _adminManager?.ReceivePickedSelector(selector, tag ?? "", href ?? "", label ?? "", pickedHost);
         }
         catch (Exception ex) { AppDiagnostics.Write("Read selected page element", ex); }
     }
