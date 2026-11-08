@@ -174,6 +174,9 @@ internal sealed class AdminManagerForm : Form
     public event Action? PickElementRequested;
     public event Action? ScanLinksRequested;
     public event Action? RulesChanged;
+    public event Action<bool>? AdminModeChanged;
+    private bool adminMode;
+    private Button? adminModeButton;
     public AdminManagerForm(string url)
     {
         currentUrl = url; Text = "ניהול מערכת והרשאות"; Width = 790; Height = 590; MinimumSize = new Size(650, 480);
@@ -182,32 +185,48 @@ internal sealed class AdminManagerForm : Form
     }
     private void BuildUi()
     {
-        var root = new TableLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(14), ColumnCount = 1, RowCount = 6 };
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 36)); root.RowStyles.Add(new RowStyle(SizeType.Absolute, 70));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 58)); root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 48)); root.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
+        var root = new TableLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(14), ColumnCount = 1, RowCount = 7 };
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 70));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
+        root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
         Controls.Add(root);
         root.Controls.Add(new Label { Text = "ניהול הרשאות — כתובות, נתיבים ורכיבים בעמוד", Dock = DockStyle.Fill, Font = new Font("Segoe UI", 13, FontStyle.Bold), TextAlign = ContentAlignment.MiddleRight }, 0, 0);
+        var adminStrip = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft, WrapContents = false };
+        adminModeButton = new Button { Text = "הפעל מצב מנהל — פתח את כל הנתיבים", Width = 300, Height = 32, BackColor = Color.FromArgb(28, 92, 67), ForeColor = Color.White, FlatStyle = FlatStyle.Flat };
+        adminModeButton.Click += (_, _) =>
+        {
+            adminMode = !adminMode;
+            adminModeButton.Text = adminMode ? "כבה מצב מנהל — החזר חסימות" : "הפעל מצב מנהל — פתח את כל הנתיבים";
+            adminModeButton.BackColor = adminMode ? Color.FromArgb(145, 73, 42) : Color.FromArgb(28, 92, 67);
+            AdminModeChanged?.Invoke(adminMode);
+        };
+        adminStrip.Controls.Add(adminModeButton);
+        adminStrip.Controls.Add(new Label { Text = "המצב פתוח רק כל עוד חלון הניהול פעיל", AutoSize = true, Padding = new Padding(8, 8, 0, 0) });
+        root.Controls.Add(adminStrip, 0, 1);
         var route = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft, WrapContents = true };
         route.Controls.Add(new Label { Text = "כתובת או נתיב:", AutoSize = true, Padding = new Padding(0, 8, 0, 0) });
         ruleInput.Text = currentUrl; route.Controls.Add(ruleInput);
         var block = new Button { Text = "חסום נתיב", Width = 100 }; block.Click += (_, _) => AddRoute(false);
         var allow = new Button { Text = "אפשר נתיב", Width = 100 }; allow.Click += (_, _) => AddRoute(true);
         var scan = new Button { Text = "סרוק קישורים בעמוד", Width = 150 }; scan.Click += (_, _) => ScanLinksRequested?.Invoke();
-        route.Controls.Add(block); route.Controls.Add(allow); route.Controls.Add(scan); root.Controls.Add(route, 0, 1);
+        route.Controls.Add(block); route.Controls.Add(allow); route.Controls.Add(scan); root.Controls.Add(route, 0, 2);
         var host = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft };
         host.Controls.Add(new Label { Text = "דומיין מורשה:", AutoSize = true, Padding = new Padding(0, 8, 0, 0) });
         host.Controls.Add(hostInput);
         var addHost = new Button { Text = "הוסף לאתרים המורשים", Width = 170 }; addHost.Click += (_, _) => AddHost();
-        host.Controls.Add(addHost); root.Controls.Add(host, 0, 2);
-        root.Controls.Add(rules, 0, 3); root.Controls.Add(selected, 0, 4);
+        host.Controls.Add(addHost); root.Controls.Add(host, 0, 3);
+        root.Controls.Add(rules, 0, 4); root.Controls.Add(selected, 0, 5);
         var actions = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft };
-        var pick = new Button { Text = "בחירת רכיב בלחיצה ימנית", Width = 190 }; pick.Click += (_, _) => { Hide(); PickElementRequested?.Invoke(); };
+        var pick = new Button { Text = "בחירת רכיב בלחיצה שמאלית", Width = 190 }; pick.Click += (_, _) => { Hide(); PickElementRequested?.Invoke(); };
         var blockElement = new Button { Text = "חסום רכיב שנבחר", Width = 140 }; blockElement.Click += (_, _) => SaveSelectedElement(false);
         var allowElement = new Button { Text = "אפשר רכיב שנבחר", Width = 140 }; allowElement.Click += (_, _) => SaveSelectedElement(true);
         var remove = new Button { Text = "מחק כלל מסומן", Width = 120 }; remove.Click += (_, _) => RemoveSelected();
         var change = new Button { Text = "שינוי סיסמה", Width = 110 }; change.Click += (_, _) => AdminAuthentication.ChangePassword(this);
-        actions.Controls.AddRange([pick, blockElement, allowElement, remove, change]); root.Controls.Add(actions, 0, 5);
+        actions.Controls.AddRange([pick, blockElement, allowElement, remove, change]); root.Controls.Add(actions, 0, 6);
     }
     private void AddRoute(bool allowed)
     {
@@ -259,7 +278,7 @@ internal sealed class AdminManagerForm : Form
         var marker = ": ";
         var split = selected.Text.LastIndexOf(marker, StringComparison.Ordinal);
         var selector = selected.Text.StartsWith("רכיב שנבחר", StringComparison.Ordinal) && split >= 0 ? selected.Text[(split + marker.Length)..] : "";
-        if (selector.Length == 0 || !Uri.TryCreate(currentUrl, UriKind.Absolute, out var uri)) { MessageBox.Show(this, "בחר תחילה רכיב מתוך האתר באמצעות לחיצה ימנית."); return; }
+        if (selector.Length == 0 || !Uri.TryCreate(currentUrl, UriKind.Absolute, out var uri)) { MessageBox.Show(this, "בחר תחילה רכיב מתוך האתר באמצעות לחיצה שמאלית."); return; }
         policy.Elements.RemoveAll(r => r.Host.Equals(uri.Host, StringComparison.OrdinalIgnoreCase) && r.Selector == selector);
         policy.Elements.Add(new ElementPolicyRule(uri.Host, selector, allowed));
         AdminPolicyStore.Save(policy); RefreshRules(); RulesChanged?.Invoke();
@@ -273,11 +292,16 @@ internal sealed class AdminManagerForm : Form
             if (all[index] is RoutePolicyRule route) policy.Routes.Remove(route);
             if (all[index] is ElementPolicyRule element) policy.Elements.Remove(element);
         }
-        else
+        else if (index < all.Count + policy.AllowedHosts.Count)
         {
             var hostIndex = index - all.Count;
             if (hostIndex < 0 || hostIndex >= policy.AllowedHosts.Count) return;
             policy.AllowedHosts.RemoveAt(hostIndex);
+        }
+        else
+        {
+            MessageBox.Show(this, "השורה שנבחרה היא מידע על קישור או חסימה מובנית. כדי לשנות אותה, בחר קישור ולחץ על אפשר נתיב או חסום נתיב.");
+            return;
         }
         AdminPolicyStore.Save(policy); RefreshRules(); RulesChanged?.Invoke();
     }
