@@ -217,9 +217,17 @@ internal sealed class AdminManagerForm : Form
     {
         var index = rules.SelectedIndex; if (index < 0) return;
         var all = policy.Routes.Select(r => (object)r).Concat(policy.Elements.Select(e => (object)e)).ToList();
-        if (index >= all.Count) return;
-        if (all[index] is RoutePolicyRule route) policy.Routes.Remove(route);
-        if (all[index] is ElementPolicyRule element) policy.Elements.Remove(element);
+        if (index < all.Count)
+        {
+            if (all[index] is RoutePolicyRule route) policy.Routes.Remove(route);
+            if (all[index] is ElementPolicyRule element) policy.Elements.Remove(element);
+        }
+        else
+        {
+            var hostIndex = index - all.Count;
+            if (hostIndex < 0 || hostIndex >= policy.AllowedHosts.Count) return;
+            policy.AllowedHosts.RemoveAt(hostIndex);
+        }
         AdminPolicyStore.Save(policy); RefreshRules(); RulesChanged?.Invoke();
     }
     private void RefreshRules()
