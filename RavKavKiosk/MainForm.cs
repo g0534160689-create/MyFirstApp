@@ -53,7 +53,7 @@ internal sealed class MainForm : Form
         BackColor = Color.FromArgb(9, 18, 34);
         Font = new Font("Segoe UI", 10);
 
-        var header = new BufferedPanel { Dock = DockStyle.Top, Height = 68, BackColor = Color.FromArgb(10, 19, 33), Padding = new Padding(28, 0, 28, 0) };
+        var header = new BufferedPanel { Dock = DockStyle.Top, Height = 70, BackColor = Color.FromArgb(8, 16, 29), Padding = new Padding(30, 0, 30, 0) };
         var brand = new Label
         {
             Text = "ישיבת דעת אהרן     ✦     המרכז הדיגיטלי", Dock = DockStyle.Right, Width = 560,
@@ -65,6 +65,12 @@ internal sealed class MainForm : Form
         _back.Width = 170;
         _back.FlatStyle = FlatStyle.Flat;
         _back.FlatAppearance.BorderColor = Color.FromArgb(100, 150, 190);
+        _back.FlatAppearance.BorderSize = 1;
+        _back.FlatAppearance.MouseOverBackColor = Color.FromArgb(35, 62, 91);
+        _back.FlatAppearance.MouseDownBackColor = Color.FromArgb(49, 79, 109);
+        _back.Cursor = Cursors.Hand;
+        _back.Font = new Font("Segoe UI", 9, FontStyle.Bold);
+        _back.AccessibleName = "חזרה למסך הראשי";
         _back.ForeColor = Color.White;
         _back.BackColor = Navy;
         _back.Visible = false;
@@ -86,7 +92,7 @@ internal sealed class MainForm : Form
 
         header.Controls.Add(_back);
 
-        var footer = new BufferedPanel { Dock = DockStyle.Bottom, Height = 32, BackColor = Color.FromArgb(12, 22, 38), Padding = new Padding(12, 0, 12, 0) };
+        var footer = new BufferedPanel { Dock = DockStyle.Bottom, Height = 34, BackColor = Color.FromArgb(10, 19, 33), Padding = new Padding(18, 0, 18, 0) };
         footer.Controls.Add(_status);
 
         Controls.Add(_home);
@@ -119,6 +125,7 @@ internal sealed class MainForm : Form
     {
         _home.BackColor = Color.FromArgb(12, 22, 38);
         _home.Padding = new Padding(0);
+        _home.TabStop = false;
 
         var layout = new TableLayoutPanel
         {
@@ -147,6 +154,7 @@ internal sealed class MainForm : Form
         _dateClock.BackColor = Color.Transparent;
         _dateClock.Font = new Font("Segoe UI", 9, FontStyle.Bold);
         _dateClock.AccessibleName = "תאריך ושעה";
+        _dateClock.Padding = new Padding(6, 0, 0, 0);
         _dateClock.TextAlign = ContentAlignment.MiddleLeft;
         meta.Controls.Add(_dateClock);
 
@@ -211,7 +219,16 @@ internal sealed class MainForm : Form
         _searchBox.TextAlign = HorizontalAlignment.Right;
         _searchBox.PlaceholderText = "חיפוש מהיר: שירות, מבחן, מקור לימוד...";
         _searchBox.AccessibleName = "חיפוש שירותים";
+        _searchBox.TabIndex = 1;
+        _searchBox.MaxLength = 120;
         _searchBox.TextChanged += (_, _) => { _searchTimer.Stop(); _searchTimer.Start(); };
+        searchLabel.AccessibleName = "סמל חיפוש";
+        searchLabel.Padding = new Padding(0, 0, 2, 0);
+        searchHost.Paint += (_, e) =>
+        {
+            using var border = new Pen(Color.FromArgb(67, 101, 132), 1.2f);
+            e.Graphics.DrawRectangle(border, 0, 0, Math.Max(1, searchHost.Width - 1), Math.Max(1, searchHost.Height - 1));
+        };
         searchHost.Controls.Add(_searchBox);
         searchHost.Controls.Add(searchLabel);
 
@@ -232,8 +249,9 @@ internal sealed class MainForm : Form
         _cardsPanel.FlowDirection = FlowDirection.RightToLeft;
         _cardsPanel.FlowDirection = FlowDirection.RightToLeft;
         _cardsPanel.BackColor = Color.Transparent;
-        _cardsPanel.Padding = new Padding(10, 10, 10, 14);
+        _cardsPanel.Padding = new Padding(12, 12, 12, 16);
         _cardsPanel.Margin = new Padding(0, 2, 0, 0);
+        _cardsPanel.TabStop = true;
 
         var sectionHeader = new BufferedPanel { Dock = DockStyle.Fill, BackColor = Color.Transparent, Padding = new Padding(4, 0, 4, 0) };
         sectionHeader.Controls.Add(new Label
@@ -379,6 +397,11 @@ internal sealed class MainForm : Form
     {
         var button = new Button { Text = caption, Width = 154, Height = 38, Margin = new Padding(5, 2, 5, 2), FlatStyle = FlatStyle.Flat, BackColor = Color.FromArgb(23, 43, 68), ForeColor = Color.FromArgb(197, 184, 165), Font = new Font("Segoe UI", 10, FontStyle.Bold), Cursor = Cursors.Hand, UseVisualStyleBackColor = false, Tag = filter };
         button.FlatAppearance.BorderColor = Color.FromArgb(78, 116, 151);
+        button.FlatAppearance.BorderSize = 1;
+        button.Padding = new Padding(8, 2, 8, 2);
+        button.TextAlign = ContentAlignment.MiddleCenter;
+        button.AccessibleName = caption;
+        button.TabStop = true;
         button.FlatAppearance.MouseOverBackColor = Color.FromArgb(41, 65, 91);
         button.FlatAppearance.MouseDownBackColor = Color.FromArgb(55, 78, 98);
         button.Click += (_, _) =>
@@ -434,7 +457,8 @@ internal sealed class MainForm : Form
                 Text = featured ? "↗" : link.Category switch { "tests" => "✧", "services" => "▣", _ => "▤" },
                 Dock = DockStyle.Right, Width = 62, ForeColor = categoryColor,
                 Font = new Font("Segoe UI Symbol", 26, FontStyle.Bold),
-                TextAlign = ContentAlignment.MiddleCenter, BackColor = Color.FromArgb(34, 57, 79)
+                TextAlign = ContentAlignment.MiddleCenter, BackColor = Color.FromArgb(34, 57, 79),
+                AccessibleName = "סמל קטגוריה: " + link.Category, Padding = new Padding(2)
             };
             var fav = new Button
             {
@@ -450,6 +474,9 @@ internal sealed class MainForm : Form
             fav.FlatAppearance.BorderSize = 0;
             fav.FlatAppearance.MouseOverBackColor = Color.FromArgb(56, 68, 77);
             fav.FlatAppearance.MouseDownBackColor = Color.FromArgb(75, 81, 83);
+            fav.FlatAppearance.BorderColor = Color.FromArgb(69, 88, 107);
+            fav.FlatAppearance.BorderSize = 1;
+            fav.TabStop = true;
             fav.Click += (_, _) =>
             {
                 if (!_favorites.Add(link.Id)) _favorites.Remove(link.Id);
@@ -462,20 +489,22 @@ internal sealed class MainForm : Form
             {
                 Text = (featured ? "●  מומלץ עבורך" : "●  " + link.Badge), Dock = DockStyle.Top, Height = 27,
                 ForeColor = categoryColor, Font = new Font("Segoe UI", 9, FontStyle.Bold),
-                TextAlign = ContentAlignment.MiddleRight, BackColor = Color.Transparent
+                TextAlign = ContentAlignment.MiddleRight, BackColor = Color.Transparent,
+                Padding = new Padding(0, 1, 0, 1), AccessibleName = "תגית " + link.Badge
             };
             var title = new Label
             {
                 Text = link.Title, Dock = DockStyle.Top, Height = 42,
                 ForeColor = Color.FromArgb(249, 250, 252), Font = new Font("Segoe UI", 16, FontStyle.Bold),
-                TextAlign = ContentAlignment.MiddleRight, Cursor = Cursors.Hand, BackColor = Color.Transparent
+                TextAlign = ContentAlignment.MiddleRight, Cursor = Cursors.Hand, BackColor = Color.Transparent,
+                AutoEllipsis = true, AccessibleName = link.Title
             };
             var description = new Label
             {
                 Text = link.Subtitle, Dock = DockStyle.Top, Height = 38,
                 ForeColor = Color.FromArgb(181, 197, 213), Font = new Font("Segoe UI", 9),
                 TextAlign = ContentAlignment.TopRight, Cursor = Cursors.Hand, BackColor = Color.Transparent,
-                AutoEllipsis = true
+                AutoEllipsis = true, AccessibleName = "תיאור " + link.Title
             };
             var bottom = new Label
             {
@@ -483,7 +512,8 @@ internal sealed class MainForm : Form
                 Text = "נפתח " + _clickCounts.GetValueOrDefault(link.Id) + " פעמים",
                 Dock = DockStyle.Bottom, Height = 22,
                 ForeColor = categoryColor, Font = new Font("Segoe UI", 9, FontStyle.Bold),
-                TextAlign = ContentAlignment.MiddleRight, Cursor = Cursors.Hand, BackColor = Color.Transparent
+                TextAlign = ContentAlignment.MiddleRight, Cursor = Cursors.Hand, BackColor = Color.Transparent,
+                AccessibleName = "מונה פתיחות " + link.Title
             };
             var openButton = new Button
             {
@@ -494,6 +524,10 @@ internal sealed class MainForm : Form
                 UseVisualStyleBackColor = false, Margin = new Padding(0, 3, 0, 0)
             };
             openButton.FlatAppearance.BorderColor = Color.FromArgb(74, 100, 127);
+            openButton.FlatAppearance.BorderSize = 1;
+            openButton.FlatAppearance.MouseDownBackColor = Color.FromArgb(57, 82, 107);
+            openButton.Padding = new Padding(8, 2, 8, 2);
+            openButton.AccessibleName = "פתיחת השירות " + link.Title;
             openButton.FlatAppearance.MouseOverBackColor = Color.FromArgb(47, 72, 97);
             openButton.Click += (_, _) => Launch();
             var separator = new Panel { Dock = DockStyle.Bottom, Height = 1, BackColor = Color.FromArgb(53, 75, 98), Margin = new Padding(0, 2, 0, 2) };
@@ -518,6 +552,14 @@ internal sealed class MainForm : Form
             tooltip.SetToolTip(card, "לחץ לפתיחת " + link.Title);
             tooltip.SetToolTip(icon, "פתיחת " + link.Title);
             tooltip.SetToolTip(fav, "הוספה או הסרה מהמועדפים");
+            card.KeyDown += (_, e) =>
+            {
+                if (e.KeyCode == Keys.Enter || e.KeyCode == Keys.Space) { e.Handled = true; Launch(); }
+            };
+            card.TabStop = true;
+            card.AccessibleRole = AccessibleRole.Link;
+            card.AccessibleName = "פתיחת " + link.Title;
+            openButton.TabStop = true;
             card.Click += (_, _) => Launch();
             content.Click += (_, _) => Launch();
             title.Click += (_, _) => Launch();
