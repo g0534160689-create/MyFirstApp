@@ -9,7 +9,7 @@ namespace RavKavKiosk;
 internal sealed class MainForm : Form
 {
     private readonly AppSettings _settings = AppSettings.Load();
-    private readonly WebView2 _browser = new() { Dock = DockStyle.Fill, Visible = false };
+    private WebView2 _browser = new() { Dock = DockStyle.Fill, Visible = false };
     private readonly BufferedPanel _home = new() { Dock = DockStyle.Fill, BackColor = Color.FromArgb(9, 18, 34) };
     private readonly Label _status = new()
     {
@@ -22,7 +22,8 @@ internal sealed class MainForm : Form
     private readonly Button _back = new();
     private AdminManagerForm? _adminManager;
     private bool _elementPicking;
-    private CoreWebView2Environment? _webViewEnvironment;
+    private readonly Dictionary<string, CoreWebView2Environment> _webViewEnvironments = new(StringComparer.OrdinalIgnoreCase);
+    private string? _initializedServiceProfile;
     private bool _browserInitialized;
     private readonly string? _backgroundImagePath = ResolveBackgroundImagePath();
     private BufferedPanel? _heroPanel;
@@ -877,6 +878,21 @@ internal sealed class MainForm : Form
 
     private async Task OpenOfficialServiceAsync(string startUrl, string serviceName)
     {
+        var profileKey = serviceName.Contains("HopOn", StringComparison.OrdinalIgnoreCase) ? "HopOn" : "RavKavOnline";
+        if (_browserInitialized && !string.Equals(_initializedServiceProfile, profileKey, StringComparison.OrdinalIgnoreCase))
+        {
+            // Give each official service its own WebView2 instance and persistent browser profile.
+            // This prevents cookies, cache, storage and service-specific navigation state from mixing.
+            Controls.Remove(_browser);
+            _browser.Dispose();
+            _browser = new WebView2 { Dock = DockStyle.Fill, Visible = false };
+            Controls.Add(_browser);
+            Controls.SetChildIndex(_browser, Math.Min(1, Controls.Count - 1));
+            _browserInitialized = false;
+            _elementPicking = false;
+            AppDiagnostics.Write("Browser profile switched", details: "New isolated profile: " + profileKey);
+        }
+        _activeServiceProfile = profileKey;
         _activeStartUrl = startUrl;
         _activeServiceName = serviceName;
         _status.Text = $"מתחבר לשירות {serviceName}...";
@@ -887,21 +903,26 @@ internal sealed class MainForm : Form
         {
             if (!_browserInitialized)
             {
-                // Keep one WebView2 environment for this app and store its profile
-                // under the current user's LocalAppData (not beside the EXE).
+                // Independent persistent WebView2 data directories for HopOn and Rav-Kav Online.
                 var userDataFolder = Path.Combine(
                     Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                     "RavKavKiosk",
-                    "WebView2");
+                    "WebView2",
+                    profileKey);
                 Directory.CreateDirectory(userDataFolder);
 
-                _webViewEnvironment ??= await CoreWebView2Environment.CreateAsync(
-                    browserExecutableFolder: null,
-                    userDataFolder: userDataFolder);
+                if (!_webViewEnvironments.TryGetValue(profileKey, out var environment))
+                {
+                    environment = await CoreWebView2Environment.CreateAsync(
+                        browserExecutableFolder: null,
+                        userDataFolder: userDataFolder);
+                    _webViewEnvironments[profileKey] = environment;
+                }
 
-                await _browser.EnsureCoreWebView2Async(_webViewEnvironment);
+                await _browser.EnsureCoreWebView2Async(environment);
                 var core = _browser.CoreWebView2;
                 core.Settings.AreDefaultContextMenusEnabled = false;
+                core.Settings.AreDefaultScriptDialogsEnabled = true;
                 core.Settings.AreDevToolsEnabled = false;
                 core.Settings.IsStatusBarEnabled = false;
                 core.Settings.IsZoomControlEnabled = false;
@@ -927,11 +948,17 @@ internal sealed class MainForm : Form
                     CoreWebView2WebResourceRequestSourceKinds.All);
                 core.WebResourceRequested += OnWebResourceRequested;
 
-                await core.AddScriptToExecuteOnDocumentCreatedAsync(BuildRouteGuardScript(_settings.StartUrl));
-                await core.AddScriptToExecuteOnDocumentCreatedAsync(BuildRouteGuardScript(_settings.RavKavStartUrl));
+                await core.AddScriptToExecuteOnDocumentCreatedAsync(BuildRouteGuardScript(
+                    profileKey == "HopOn" ? _settings.StartUrl : _settings.RavKavStartUrl));
                 core.DownloadStarting += (_, args) => args.Cancel = true;
                 core.LaunchingExternalUriScheme += OnLaunchingExternalUriScheme;
-                core.PermissionRequested += (_, args) => args.State = CoreWebView2PermissionState.Deny;
+                core.PermissionRequested += (_, args) =>
+                {
+                    // Do not silently grant camera/microphone/location permissions. The CAPTCHA
+                    // checkbox and image challenge work without weakening the user's permissions.
+                    args.State = CoreWebView2PermissionState.Deny;
+                    AppDiagnostics.Write("Web permission denied", details: args.PermissionKind + " from " + SafeOriginForLog(args.Uri));
+                };
                 core.SourceChanged += (_, _) =>
                 {
                     EnforceCurrentPage();
@@ -964,6 +991,7 @@ internal sealed class MainForm : Form
                     _status.Text = "רכיב הדפדפן הפסיק לפעול. חזור ונסה שוב.";
                 };
                 _browserInitialized = true;
+                _initializedServiceProfile = profileKey;
             }
 
             if (!Uri.TryCreate(startUrl, UriKind.Absolute, out var start) ||
@@ -994,10 +1022,14 @@ internal sealed class MainForm : Form
 
     // Temporary, session-only override for inspecting routes blocked by normal kiosk policy.
     private bool _adminMode;
-    private bool IsAllowedNavigationUri(Uri uri) => _adminMode
+    private string _activeServiceProfile = "HopOn";
+    private bool IsAllowedNavigationUri(Uri uri) =>
+        (_activeServiceProfile == "HopOn" && IsHopOnVerificationUri(uri)) || (_adminMode
         ? uri.IsAbsoluteUri && uri.Scheme == Uri.UriSchemeHttps && uri.IsDefaultPort && string.IsNullOrEmpty(uri.UserInfo)
-        : _settings.IsAllowedNavigationUri(uri);
-    private bool IsBlockedNavigationUri(Uri uri) => _adminMode ? false : _settings.IsBlockedNavigationUri(uri);
+        : _settings.IsAllowedNavigationUri(uri));
+    private bool IsBlockedNavigationUri(Uri uri) =>
+        (_activeServiceProfile == "HopOn" && IsHopOnVerificationUri(uri)) ? false :
+        (_adminMode ? false : _settings.IsBlockedNavigationUri(uri));
     private void SetAdminMode(bool enabled)
     {
         _adminMode = enabled;
@@ -1321,12 +1353,26 @@ internal sealed class MainForm : Form
 
     private void OnFrameNavigationStarting(object? sender, CoreWebView2NavigationStartingEventArgs e)
     {
-        if (!Uri.TryCreate(e.Uri, UriKind.Absolute, out var target) ||
-            !IsAllowedNavigationUri(target) ||
-            IsBlockedNavigationUri(target))
+        if (!Uri.TryCreate(e.Uri, UriKind.Absolute, out var target))
+        {
+            e.Cancel = true;
+            AppDiagnostics.Write("Frame navigation blocked", details: "Invalid frame URI");
+            return;
+        }
+
+        // CAPTCHA providers run in cross-origin iframes. Permit only their dedicated
+        // challenge endpoints while HopOn is active; all other third-party frames remain blocked.
+        if (_activeServiceProfile == "HopOn" && IsHopOnVerificationUri(target))
+        {
+            AppDiagnostics.Write("HopOn verification frame allowed", details: SafeOriginForLog(target.GetLeftPart(UriPartial.Authority)));
+            return;
+        }
+
+        if (!IsAllowedNavigationUri(target) || IsBlockedNavigationUri(target))
         {
             e.Cancel = true;
             _status.Text = "העמוד המבוקש חסום בעמדה זו.";
+            AppDiagnostics.Write("Frame navigation blocked", details: target.GetLeftPart(UriPartial.Authority));
         }
     }
 
@@ -1357,6 +1403,27 @@ internal sealed class MainForm : Form
         uri.Scheme.Equals("ravkavonline", StringComparison.OrdinalIgnoreCase) ||
         uri.Scheme.Equals("ravkavonline.exe", StringComparison.OrdinalIgnoreCase);
 
+    private static bool IsHopOnVerificationUri(Uri uri)
+    {
+        if (!uri.IsAbsoluteUri || uri.Scheme != Uri.UriSchemeHttps || !uri.IsDefaultPort ||
+            !string.IsNullOrEmpty(uri.UserInfo)) return false;
+
+        var host = uri.IdnHost.ToLowerInvariant();
+        var path = uri.AbsolutePath;
+        return host switch
+        {
+            "google.com" or "www.google.com" => path.StartsWith("/recaptcha/", StringComparison.OrdinalIgnoreCase),
+            "recaptcha.net" or "www.recaptcha.net" => path.StartsWith("/recaptcha/", StringComparison.OrdinalIgnoreCase),
+            "gstatic.com" or "www.gstatic.com" => path.StartsWith("/recaptcha/", StringComparison.OrdinalIgnoreCase),
+            "challenges.cloudflare.com" => path.StartsWith("/cdn-cgi/challenge-platform/", StringComparison.OrdinalIgnoreCase) ||
+                                            path.StartsWith("/turnstile/", StringComparison.OrdinalIgnoreCase),
+            "hcaptcha.com" or "www.hcaptcha.com" => path.StartsWith("/1/", StringComparison.OrdinalIgnoreCase),
+            "newassets.hcaptcha.com" or "js.hcaptcha.com" => path.StartsWith("/captcha/", StringComparison.OrdinalIgnoreCase) ||
+                                                               path.StartsWith("/1/", StringComparison.OrdinalIgnoreCase),
+            _ => false
+        };
+    }
+
     private void OnNavigationStarting(object? sender, CoreWebView2NavigationStartingEventArgs e)
     {
         if (Uri.TryCreate(e.Uri, UriKind.Absolute, out var external) && IsRavKavReaderProtocol(external))
@@ -1380,6 +1447,16 @@ internal sealed class MainForm : Form
 
     private void OnNewWindowRequested(object? sender, CoreWebView2NewWindowRequestedEventArgs e)
     {
+        if (Uri.TryCreate(e.Uri, UriKind.Absolute, out var verificationPopup) &&
+            _activeServiceProfile == "HopOn" && IsHopOnVerificationUri(verificationPopup))
+        {
+            // Leave CAPTCHA challenge popups to WebView2's native popup handling.
+            // Navigating them into the main tab would replace the HopOn session page.
+            e.Handled = false;
+            AppDiagnostics.Write("HopOn verification popup allowed", details: SafeOriginForLog(verificationPopup.GetLeftPart(UriPartial.Authority)));
+            return;
+        }
+
         e.Handled = true;
         if (Uri.TryCreate(e.Uri, UriKind.Absolute, out var target) && IsRavKavReaderProtocol(target))
         {
