@@ -1023,13 +1023,36 @@ internal sealed class MainForm : Form
     // Temporary, session-only override for inspecting routes blocked by normal kiosk policy.
     private bool _adminMode;
     private string _activeServiceProfile = "HopOn";
-    private bool IsAllowedNavigationUri(Uri uri) =>
-        (_activeServiceProfile == "HopOn" && IsHopOnVerificationUri(uri)) || (_adminMode
-        ? uri.IsAbsoluteUri && uri.Scheme == Uri.UriSchemeHttps && uri.IsDefaultPort && string.IsNullOrEmpty(uri.UserInfo)
-        : _settings.IsAllowedNavigationUri(uri));
-    private bool IsBlockedNavigationUri(Uri uri) =>
-        (_activeServiceProfile == "HopOn" && IsHopOnVerificationUri(uri)) ? false :
-        (_adminMode ? false : _settings.IsBlockedNavigationUri(uri));
+    private bool IsAllowedNavigationUri(Uri uri)
+    {
+        // During a user-initiated Rav-Kav/HopOn purchase flow, payment processors,
+        // identity checks and 3-D Secure may use separate HTTPS hosts. Keep the
+        // browser inside secure HTTPS and never permit insecure or credentialed URLs.
+        if (!IsSecureWebNavigationUri(uri)) return false;
+        var adminDecision = AdminPolicyStore.RouteDecision(uri);
+        return !adminDecision.HasValue || adminDecision.Value;
+    }
+
+    private bool IsBlockedNavigationUri(Uri uri)
+    {
+        if (!IsSecureWebNavigationUri(uri)) return true;
+        var adminDecision = AdminPolicyStore.RouteDecision(uri);
+        if (adminDecision.HasValue) return !adminDecision.Value;
+
+        // Keep HopOn's intentionally blocked information/map routes blocked,
+        // but do not restrict its checkout path or the independent payment domain.
+        if (_activeServiceProfile == "HopOn" && _settings.IsHopOnUri(uri))
+            return _settings.IsBlockedNavigationUri(uri);
+
+        // Rav-Kav Online has several stages after /he/store/connect (card scan,
+        // contract selection, payment, reader write and confirmation). Do not
+        // pin it to the entry URL; all secure routes in its active transaction work.
+        return false;
+    }
+
+    private static bool IsSecureWebNavigationUri(Uri uri) =>
+        uri.IsAbsoluteUri && uri.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase) &&
+        uri.IsDefaultPort && string.IsNullOrEmpty(uri.UserInfo);
     private void SetAdminMode(bool enabled)
     {
         _adminMode = enabled;
@@ -1221,10 +1244,13 @@ internal sealed class MainForm : Form
         var serviceUri = new Uri(serviceStartUrl);
         var origin = serviceUri.GetLeftPart(UriPartial.Authority);
         var originJson = JsonSerializer.Serialize(origin);
-        var strictPath = _settings.IsRavKavUri(serviceUri);
+        // Both services need multi-step workflows. Rav-Kav Online must move beyond
+        // /he/store/connect; HopOn checkout may move between /read, /pay and payment.
+        var strictPath = false;
         var strictPathJson = JsonSerializer.Serialize(strictPath);
         var allowedPathJson = JsonSerializer.Serialize(_settings.RavKavAllowedPath);
-        var blockedPathsJson = JsonSerializer.Serialize(_settings.BlockedPaths);
+        var blockedPaths = _settings.IsRavKavUri(serviceUri) ? Array.Empty<string>() : _settings.BlockedPaths.ToArray();
+        var blockedPathsJson = JsonSerializer.Serialize(blockedPaths);
         var paymentPathsJson = JsonSerializer.Serialize(_settings.HopOnPaymentPaths ?? ["/pay"]);
         var adminRulesJson = JsonSerializer.Serialize(AdminPolicyStore.Load().Routes
             .Where(r => r.Host.Equals(serviceUri.Host, StringComparison.OrdinalIgnoreCase))
@@ -1447,31 +1473,27 @@ internal sealed class MainForm : Form
 
     private void OnNewWindowRequested(object? sender, CoreWebView2NewWindowRequestedEventArgs e)
     {
-        if (Uri.TryCreate(e.Uri, UriKind.Absolute, out var verificationPopup) &&
-            _activeServiceProfile == "HopOn" && IsHopOnVerificationUri(verificationPopup))
-        {
-            // Leave CAPTCHA challenge popups to WebView2's native popup handling.
-            // Navigating them into the main tab would replace the HopOn session page.
-            e.Handled = false;
-            AppDiagnostics.Write("HopOn verification popup allowed", details: SafeOriginForLog(verificationPopup.GetLeftPart(UriPartial.Authority)));
-            return;
-        }
-
-        e.Handled = true;
         if (Uri.TryCreate(e.Uri, UriKind.Absolute, out var target) && IsRavKavReaderProtocol(target))
         {
-            // Route target=_blank protocol links through the main WebView2
-            // navigation pipeline so LaunchingExternalUriScheme can confirm them.
+            e.Handled = true;
+            // Route the reader protocol through the existing external-scheme confirmation handler.
             _browser.CoreWebView2.Navigate(e.Uri);
             return;
         }
 
         if (Uri.TryCreate(e.Uri, UriKind.Absolute, out target) &&
-            IsAllowedNavigationUri(target) &&
-            !IsBlockedNavigationUri(target))
-            _browser.CoreWebView2.Navigate(target.ToString());
-        else
-            _status.Text = "חלון חיצוני נחסם.";
+            IsAllowedNavigationUri(target) && !IsBlockedNavigationUri(target))
+        {
+            // Keep real popups as popups. Payment verification (3-D Secure),
+            // CAPTCHA and bank authentication often depend on window.opener/postMessage.
+            e.Handled = false;
+            AppDiagnostics.Write("Secure popup allowed", details: SafeOriginForLog(target.GetLeftPart(UriPartial.Authority)));
+            return;
+        }
+
+        e.Handled = true;
+        _status.Text = "חלון חיצוני לא מאובטח או חסום.";
+        AppDiagnostics.Write("Popup blocked", details: "Invalid or blocked popup URI");
     }
 
     private void OnLaunchingExternalUriScheme(object? sender, CoreWebView2LaunchingExternalUriSchemeEventArgs e)
