@@ -1386,8 +1386,20 @@ internal sealed class MainForm : Form
             return;
         }
 
+        // Rav-Kav Online starts its locally installed card-reader helper through a
+        // custom URI scheme. Some site versions trigger that scheme from a hidden
+        // iframe rather than the top-level document. Do not cancel it here: allow
+        // WebView2 to raise LaunchingExternalUriScheme, where the explicit approval
+        // dialog and trusted-origin check are enforced.
+        if (_activeServiceProfile == "RavKavOnline" && IsRavKavReaderProtocol(target))
+        {
+            AppDiagnostics.Write("Rav-Kav reader frame protocol allowed",
+                details: "Scheme: " + target.Scheme + "; host: " + target.Host);
+            return;
+        }
+
         // CAPTCHA providers run in cross-origin iframes. Permit only their dedicated
-        // challenge endpoints while HopOn is active; all other third-party frames remain blocked.
+        // challenge endpoints while HopOn is active.
         if (_activeServiceProfile == "HopOn" && IsHopOnVerificationUri(target))
         {
             AppDiagnostics.Write("HopOn verification frame allowed", details: SafeOriginForLog(target.GetLeftPart(UriPartial.Authority)));
@@ -1398,7 +1410,8 @@ internal sealed class MainForm : Form
         {
             e.Cancel = true;
             _status.Text = "העמוד המבוקש חסום בעמדה זו.";
-            AppDiagnostics.Write("Frame navigation blocked", details: target.GetLeftPart(UriPartial.Authority));
+            AppDiagnostics.Write("Frame navigation blocked",
+                details: target.GetLeftPart(UriPartial.Authority) + " | scheme: " + target.Scheme);
         }
     }
 
