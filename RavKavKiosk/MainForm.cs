@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Reflection;
 using System.Text.Json;
 using Microsoft.Web.WebView2.Core;
@@ -1398,19 +1399,149 @@ internal sealed class MainForm : Form
 
     private void OnLaunchingExternalUriScheme(object? sender, CoreWebView2LaunchingExternalUriSchemeEventArgs e)
     {
-        if (Uri.TryCreate(e.Uri, UriKind.Absolute, out var target) && IsRavKavReaderProtocol(target))
+        if (!Uri.TryCreate(e.Uri, UriKind.Absolute, out var target) || !IsRavKavReaderProtocol(target))
         {
-            // Cancel=false is intentional: WebView2 displays its native
-            // "open external application?" confirmation and launches the
-            // registered card-reader application after the user approves.
-            e.Cancel = false;
-            _status.Text = "אשר בחלונית שתופיע את הפעלת קורא הכרטיסים.";
-            AppDiagnostics.Write("Reader protocol confirmation shown", new InvalidOperationException("URI: " + e.Uri));
+            e.Cancel = true;
+            _status.Text = "קישור חיצוני שאינו של קורא הכרטיסים נחסם.";
+            AppDiagnostics.Write("External protocol blocked", new InvalidOperationException("Unapproved external URI scheme."));
             return;
         }
 
+        // Do not rely on WebView2's optional browser-style prompt: it can be
+        // suppressed by WebView2 settings/origin trust. Replace it with our
+        // own explicit confirmation, then ask Windows to resolve the URI.
         e.Cancel = true;
-        _status.Text = "קישור חיצוני שאינו של קורא הכרטיסים נחסם.";
-        AppDiagnostics.Write("External protocol blocked", new InvalidOperationException("URI: " + e.Uri));
+        var origin = e.InitiatingOrigin ?? string.Empty;
+        if (!IsTrustedReaderOrigin(origin))
+        {
+            _status.Text = "בקשת קורא הכרטיסים נדחתה: מקור האתר אינו מאושר.";
+            AppDiagnostics.Write("Reader protocol rejected", new InvalidOperationException("Untrusted initiating origin: " + SafeOriginForLog(origin)));
+            return;
+        }
+
+        _status.Text = "ממתין לאישור הפעלת קורא הכרטיסים...";
+        AppDiagnostics.Write("Reader protocol confirmation requested", new InvalidOperationException("Scheme: " + target.Scheme + "; Origin: " + SafeOriginForLog(origin)));
+
+        using var prompt = new ReaderLaunchConfirmationForm(origin, target.Scheme);
+        if (prompt.ShowDialog(this) != DialogResult.Yes)
+        {
+            _status.Text = "הפעלת קורא הכרטיסים בוטלה.";
+            AppDiagnostics.Write("Reader protocol launch declined", new InvalidOperationException("User declined external application launch."));
+            return;
+        }
+
+        try
+        {
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = e.Uri,
+                UseShellExecute = true
+            });
+            _status.Text = "נשלחה בקשה להפעלת תוכנת קורא הכרטיסים.";
+            AppDiagnostics.Write("Reader protocol launch approved", new InvalidOperationException("Scheme: " + target.Scheme));
+        }
+        catch (Exception ex)
+        {
+            AppDiagnostics.Write("Reader protocol launch failed", ex);
+            _status.Text = "לא ניתן להפעיל את קורא הכרטיסים. בדוק שהתוכנה מותקנת.";
+            MessageBox.Show(this,
+                "Windows לא הצליח לפתוח את תוכנת קורא הכרטיסים.\r\n\r\n" +
+                "בדוק שהתוכנה מותקנת ושהפרוטוקול שלה רשום ב-Windows.\r\n\r\n" + ex.Message,
+                "שגיאה בהפעלת קורא הכרטיסים", MessageBoxButtons.OK, MessageBoxIcon.Error,
+                MessageBoxDefaultButton.Button1, MessageBoxOptions.RtlReading | MessageBoxOptions.RightAlign);
+        }
+    }
+
+    private static bool IsTrustedReaderOrigin(string origin)
+    {
+        if (!Uri.TryCreate(origin, UriKind.Absolute, out var uri) ||
+            !uri.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        return uri.Host.Equals("hopon.co.il", StringComparison.OrdinalIgnoreCase) ||
+               uri.Host.Equals("www.hopon.co.il", StringComparison.OrdinalIgnoreCase) ||
+               uri.Host.Equals("ravkavonline.co.il", StringComparison.OrdinalIgnoreCase) ||
+               uri.Host.Equals("www.ravkavonline.co.il", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string SafeOriginForLog(string origin) =>
+        Uri.TryCreate(origin, UriKind.Absolute, out var uri) ? uri.GetLeftPart(UriPartial.Authority) : "(unknown origin)";
+
+    private sealed class ReaderLaunchConfirmationForm : Form
+    {
+        public ReaderLaunchConfirmationForm(string origin, string scheme)
+        {
+            Text = "אישור הפעלת קורא הכרטיסים";
+            StartPosition = FormStartPosition.CenterParent;
+            FormBorderStyle = FormBorderStyle.FixedDialog;
+            MaximizeBox = false;
+            MinimizeBox = false;
+            ShowInTaskbar = false;
+            RightToLeft = RightToLeft.Yes;
+            RightToLeftLayout = true;
+            ClientSize = new Size(520, 270);
+            BackColor = Color.FromArgb(13, 25, 43);
+            Font = new Font("Segoe UI", 10);
+            Icon = SystemIcons.Shield;
+
+            var header = new Panel { Dock = DockStyle.Top, Height = 66, BackColor = Color.FromArgb(25, 55, 78) };
+            header.Controls.Add(new Label
+            {
+                Text = "אישור פתיחת תוכנה חיצונית",
+                Dock = DockStyle.Fill,
+                ForeColor = Color.FromArgb(255, 222, 161),
+                Font = new Font("Segoe UI", 16, FontStyle.Bold),
+                TextAlign = ContentAlignment.MiddleCenter,
+                BackColor = Color.Transparent
+            });
+
+            var details = new Label
+            {
+                Dock = DockStyle.Fill,
+                Padding = new Padding(28, 22, 28, 12),
+                ForeColor = Color.FromArgb(235, 241, 248),
+                TextAlign = ContentAlignment.MiddleCenter,
+                Font = new Font("Segoe UI", 11),
+                Text = "האתר מבקש להפעיל את תוכנת קורא הכרטיסים של רב־קו.\r\n\r\n" +
+                       "מקור הבקשה: " + origin + "\r\n" +
+                       "סוג הפעלה: " + scheme + "\r\n\r\n" +
+                       "האם לאשר ל-Windows לפתוח את התוכנה המותקנת במחשב?"
+            };
+
+            var footer = new Panel { Dock = DockStyle.Bottom, Height = 72, BackColor = Color.FromArgb(9, 18, 32), Padding = new Padding(18, 12, 18, 12) };
+            var cancel = new Button
+            {
+                Text = "לא עכשיו",
+                DialogResult = DialogResult.No,
+                Dock = DockStyle.Left,
+                Width = 130,
+                FlatStyle = FlatStyle.Flat,
+                BackColor = Color.FromArgb(38, 52, 70),
+                ForeColor = Color.White,
+                Font = new Font("Segoe UI", 10, FontStyle.Bold),
+                UseVisualStyleBackColor = false
+            };
+            cancel.FlatAppearance.BorderColor = Color.FromArgb(84, 104, 128);
+            var approve = new Button
+            {
+                Text = "אישור והפעלת הקורא",
+                DialogResult = DialogResult.Yes,
+                Dock = DockStyle.Right,
+                Width = 210,
+                FlatStyle = FlatStyle.Flat,
+                BackColor = Color.FromArgb(56, 125, 99),
+                ForeColor = Color.White,
+                Font = new Font("Segoe UI", 10, FontStyle.Bold),
+                UseVisualStyleBackColor = false
+            };
+            approve.FlatAppearance.BorderColor = Color.FromArgb(122, 190, 153);
+            footer.Controls.Add(cancel);
+            footer.Controls.Add(approve);
+            Controls.Add(details);
+            Controls.Add(footer);
+            Controls.Add(header);
+            AcceptButton = approve;
+            CancelButton = cancel;
+        }
     }
 }
