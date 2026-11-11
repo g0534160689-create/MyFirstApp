@@ -1017,7 +1017,7 @@ internal sealed class MainForm : Form
             const strictPath = __STRICT_PATH__;
             const allowedPath = __ALLOWED_PATH_JSON__;
             const paymentRoots = __PAYMENT_PATHS_JSON__.map(p =>
-                String(p).replace(/\\/g, "/").replace(/\\/+$/g, "").toLowerCase()
+                String(p).replace(/\\/g, "/").replace(/\/+$/g, "").toLowerCase()
             );
             const blockedRoots = __BLOCKED_PATHS_JSON__.map(p =>
                 String(p).replace(/\\/g, "/").replace(/\/+$/g, "").toLowerCase()
