@@ -116,6 +116,7 @@ internal sealed class MainForm : Form
         Controls.Add(footer);
         Controls.Add(header);
         BuildHome();
+        ApplyTheme(AdminPolicyStore.Load().ThemeId);
         Shown += async (_, _) => await LoadVisualAssetsAsync();
         _clockTimer.Tick += (_, _) => UpdateDateClock();
         _searchTimer.Tick += (_, _) => { _searchTimer.Stop(); RenderCards(); };
@@ -1379,7 +1380,15 @@ internal sealed class MainForm : Form
     private void OnNewWindowRequested(object? sender, CoreWebView2NewWindowRequestedEventArgs e)
     {
         e.Handled = true;
-        if (Uri.TryCreate(e.Uri, UriKind.Absolute, out var target) &&
+        if (Uri.TryCreate(e.Uri, UriKind.Absolute, out var target) && IsRavKavReaderProtocol(target))
+        {
+            // Route target=_blank protocol links through the main WebView2
+            // navigation pipeline so LaunchingExternalUriScheme can confirm them.
+            _browser.CoreWebView2.Navigate(e.Uri);
+            return;
+        }
+
+        if (Uri.TryCreate(e.Uri, UriKind.Absolute, out target) &&
             IsAllowedNavigationUri(target) &&
             !IsBlockedNavigationUri(target))
             _browser.CoreWebView2.Navigate(target.ToString());
@@ -1403,4 +1412,5 @@ internal sealed class MainForm : Form
         e.Cancel = true;
         _status.Text = "קישור חיצוני שאינו של קורא הכרטיסים נחסם.";
         AppDiagnostics.Write("External protocol blocked", new InvalidOperationException("URI: " + e.Uri));
-    }}
+    }
+}
