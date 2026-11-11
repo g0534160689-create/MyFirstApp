@@ -1004,6 +1004,7 @@ internal sealed class MainForm : Form
         var strictPathJson = JsonSerializer.Serialize(strictPath);
         var allowedPathJson = JsonSerializer.Serialize(_settings.RavKavAllowedPath);
         var blockedPathsJson = JsonSerializer.Serialize(_settings.BlockedPaths);
+        var paymentPathsJson = JsonSerializer.Serialize(_settings.HopOnPaymentPaths ?? ["/pay"]);
         var adminRulesJson = JsonSerializer.Serialize(AdminPolicyStore.Load().Routes
             .Where(r => r.Host.Equals(serviceUri.Host, StringComparison.OrdinalIgnoreCase))
             .Select(r => new { path = r.Path == "/" ? "/" : r.Path.TrimEnd('/').ToLowerInvariant(), allowed = r.Allowed }));
@@ -1015,6 +1016,9 @@ internal sealed class MainForm : Form
             const allowedOrigin = __ALLOWED_ORIGIN_JSON__;
             const strictPath = __STRICT_PATH__;
             const allowedPath = __ALLOWED_PATH_JSON__;
+            const paymentRoots = __PAYMENT_PATHS_JSON__.map(p =>
+                String(p).replace(/\\/g, "/").replace(/\\/+$/g, "").toLowerCase()
+            );
             const blockedRoots = __BLOCKED_PATHS_JSON__.map(p =>
                 String(p).replace(/\\/g, "/").replace(/\/+$/g, "").toLowerCase()
             );
@@ -1054,6 +1058,7 @@ internal sealed class MainForm : Form
                 const path = normalizedPath(value);
                 if (path === "__BLOCK_INVALID__") return true;
                 if (path === null) return false;
+                if (!strictPath && paymentRoots.some(root => path === root || path.startsWith(root + "/"))) return false;
                 const matchingRules = (window.__kioskAdminRules || [])
                     .filter(rule => rule.path === "/" || path === rule.path || path.startsWith(rule.path + "/"))
                     .sort((a, b) => b.path.length - a.path.length);
@@ -1121,6 +1126,7 @@ internal sealed class MainForm : Form
             .Replace("__STRICT_PATH__", strictPathJson, StringComparison.Ordinal)
             .Replace("__ALLOWED_PATH_JSON__", allowedPathJson, StringComparison.Ordinal)
             .Replace("__BLOCKED_PATHS_JSON__", blockedPathsJson, StringComparison.Ordinal)
+            .Replace("__PAYMENT_PATHS_JSON__", paymentPathsJson, StringComparison.Ordinal)
             .Replace("__ADMIN_RULES_JSON__", adminRulesJson, StringComparison.Ordinal);
     }
 
