@@ -1346,9 +1346,27 @@ internal sealed class MainForm : Form
             (target.Scheme.Equals("ravkavonline", StringComparison.OrdinalIgnoreCase) ||
              target.Scheme.Equals("ravkavonline.exe", StringComparison.OrdinalIgnoreCase)))
         {
-            e.Cancel = false;
-            _status.Text = "מאשר פתיחת תוכנת קורא הכרטיסים של רב-קו אונליין...";
-            AppDiagnostics.Write("External card-reader protocol", new InvalidOperationException("Allowed protocol: " + target.Scheme));
+            e.Cancel = true;
+            try
+            {
+                // Hand the registered URI protocol to Windows Shell so the
+                // installed card-reader helper starts automatically.
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = e.Uri,
+                    UseShellExecute = true
+                });
+                _status.Text = "תוכנת קורא הכרטיסים נשלחה להפעלה...";
+                AppDiagnostics.Write("Card-reader launch requested", new InvalidOperationException("Protocol: " + target.Scheme));
+            }
+            catch (Exception ex)
+            {
+                _status.Text = "לא ניתן להפעיל את קורא הכרטיסים. יש לוודא שהתוכנה מותקנת.";
+                AppDiagnostics.Write("Card-reader launch failed", ex);
+                MessageBox.Show(this,
+                    "Windows לא הצליח להפעיל את תוכנת קורא הכרטיסים. ודא שהיא מותקנת ורשומה במערכת, ואז נסה שוב.\r\n\r\n" + ex.Message,
+                    "הפעלת קורא הכרטיסים", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
             return;
         }
 
