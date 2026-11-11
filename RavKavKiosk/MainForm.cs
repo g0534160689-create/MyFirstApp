@@ -729,6 +729,10 @@ internal sealed class MainForm : Form
                 core.NewWindowRequested += OnNewWindowRequested;
 
                 core.AddWebResourceRequestedFilter(
+                    "https://www.hopon.co.il/*",
+                    CoreWebView2WebResourceContext.Document,
+                    CoreWebView2WebResourceRequestSourceKinds.All);
+                core.AddWebResourceRequestedFilter(
                     "https://hopon.co.il/*",
                     CoreWebView2WebResourceContext.Document,
                     CoreWebView2WebResourceRequestSourceKinds.All);
@@ -1178,7 +1182,19 @@ internal sealed class MainForm : Form
 
     private void OnLaunchingExternalUriScheme(object? sender, CoreWebView2LaunchingExternalUriSchemeEventArgs e)
     {
+        // The official Rav-Kav Online site starts its installed card-reader helper
+        // through a registered Windows URI protocol. Allow only that protocol.
+        if (Uri.TryCreate(e.Uri, UriKind.Absolute, out var target) &&
+            (target.Scheme.Equals("ravkavonline", StringComparison.OrdinalIgnoreCase) ||
+             target.Scheme.Equals("ravkavonline.exe", StringComparison.OrdinalIgnoreCase)))
+        {
+            e.Cancel = false;
+            _status.Text = "מאשר פתיחת תוכנת קורא הכרטיסים של רב-קו אונליין...";
+            AppDiagnostics.Write("External card-reader protocol", new InvalidOperationException("Allowed protocol: " + target.Scheme));
+            return;
+        }
+
         e.Cancel = true;
-        _status.Text = "קישור חיצוני אינו מורשה בעמדה זו.";
+        _status.Text = "קישור חיצוני שאינו של קורא הכרטיסים נחסם.";
     }
 }
