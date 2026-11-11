@@ -29,6 +29,7 @@ internal sealed class MainForm : Form
     private PictureBox? _partnerLogoBox;
     private PremiumCardPanel? _ravKavPanel;
     private PremiumCardPanel? _hopOnPanel;
+    private PremiumCardPanel? _heroCard;
     private int _adminHotspotClicks;
     private DateTime _lastAdminHotspotClickUtc;
 
@@ -153,8 +154,8 @@ internal sealed class MainForm : Form
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 56));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 112));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 112));
 
         // Top utility strip
         var meta = new BufferedPanel { Dock = DockStyle.Fill, BackColor = Color.Transparent };
@@ -183,6 +184,7 @@ internal sealed class MainForm : Form
             BorderColor = Color.FromArgb(65, 91, 119),
             HoverBorderColor = Color.FromArgb(65, 91, 119)
         };
+        _heroCard = hero;
         _heroPanel = new BufferedPanel { Dock = DockStyle.Fill, BackColor = Color.Transparent };
         var heroLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1, BackColor = Color.Transparent };
         heroLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
@@ -309,8 +311,8 @@ internal sealed class MainForm : Form
         _hopOnPanel.Visible = savedPolicy.ShowHopOnPanel;
         ravKavOptions.Controls.Add(_ravKavPanel, 0, 0);
         ravKavOptions.Controls.Add(_hopOnPanel, 1, 0);
-        layout.Controls.Add(ravKavOptions, 0, 5);
-        layout.Controls.Add(_cardsPanel, 0, 6);
+        layout.Controls.Add(_cardsPanel, 0, 5);
+        layout.Controls.Add(ravKavOptions, 0, 6);
         _home.Controls.Add(layout);
         _cardsPanel.Resize += (_, _) => ResizeExistingCards();
         RenderCards();
@@ -373,6 +375,37 @@ internal sealed class MainForm : Form
         panel.Controls.Add(title);
         panel.Controls.Add(open);
         return panel;
+    }
+
+    private void ApplyTheme(string themeId)
+    {
+        var palette = themeId switch
+        {
+            "blue" => (Back: Color.FromArgb(9, 22, 43), Top: Color.FromArgb(32, 76, 119), Bottom: Color.FromArgb(15, 42, 75), Border: Color.FromArgb(77, 137, 190), Accent: Color.FromArgb(116, 190, 244)),
+            "green" => (Back: Color.FromArgb(9, 29, 28), Top: Color.FromArgb(31, 83, 69), Bottom: Color.FromArgb(14, 47, 40), Border: Color.FromArgb(76, 151, 122), Accent: Color.FromArgb(125, 218, 174)),
+            "purple" => (Back: Color.FromArgb(24, 17, 42), Top: Color.FromArgb(72, 48, 103), Bottom: Color.FromArgb(37, 24, 62), Border: Color.FromArgb(126, 96, 164), Accent: Color.FromArgb(196, 157, 245)),
+            "graphite" => (Back: Color.FromArgb(24, 28, 34), Top: Color.FromArgb(62, 70, 82), Bottom: Color.FromArgb(34, 40, 49), Border: Color.FromArgb(105, 117, 132), Accent: Color.FromArgb(184, 196, 210)),
+            _ => (Back: Color.FromArgb(12, 22, 38), Top: Color.FromArgb(29, 54, 82), Bottom: Color.FromArgb(17, 34, 55), Border: Color.FromArgb(65, 91, 119), Accent: Color.FromArgb(225, 190, 112))
+        };
+        _home.BackColor = palette.Back;
+        if (_heroCard is not null)
+        {
+            _heroCard.GradientTop = palette.Top;
+            _heroCard.GradientBottom = palette.Bottom;
+            _heroCard.BorderColor = palette.Border;
+            _heroCard.HoverBorderColor = palette.Accent;
+            _heroCard.Invalidate();
+        }
+        foreach (Control control in _cardsPanel.Controls)
+        {
+            if (control is not PremiumCardPanel card || card.Tag is not PortalLink) continue;
+            card.GradientTop = palette.Top;
+            card.GradientBottom = palette.Bottom;
+            card.BorderColor = palette.Border;
+            card.HoverBorderColor = palette.Accent;
+            card.Invalidate();
+        }
+        _home.Invalidate(true);
     }
 
     private PremiumCardPanel BuildHopOnPanel()
@@ -994,6 +1027,8 @@ internal sealed class MainForm : Form
         _adminManager.AdminModeChanged += SetAdminMode;
         _adminManager.RavKavPanelVisibilityChanged += SetRavKavPanelVisibility;
         _adminManager.HopOnPanelVisibilityChanged += SetHopOnPanelVisibility;
+        _adminManager.ThemeChanged += ApplyTheme;
+        ApplyTheme(AdminPolicyStore.Load().ThemeId);
         _adminManager.FormClosed += (_, _) => { _adminManager = null; SetAdminMode(false); };
         _adminManager.Show(this);
     }
@@ -1316,14 +1351,28 @@ internal sealed class MainForm : Form
         _status.Text = "מוכן לטעינה";
     }
 
+    private static bool IsRavKavReaderProtocol(Uri uri) =>
+        uri.Scheme.Equals("ravkavonline", StringComparison.OrdinalIgnoreCase) ||
+        uri.Scheme.Equals("ravkavonline.exe", StringComparison.OrdinalIgnoreCase);
+
     private void OnNavigationStarting(object? sender, CoreWebView2NavigationStartingEventArgs e)
     {
+        if (Uri.TryCreate(e.Uri, UriKind.Absolute, out var external) && IsRavKavReaderProtocol(external))
+        {
+            // Let WebView2 raise LaunchingExternalUriScheme and show its native
+            // confirmation prompt. Do not cancel this navigation here.
+            _status.Text = "ממתין לאישור הפעלת קורא הכרטיסים...";
+            AppDiagnostics.Write("Reader protocol navigation requested", new InvalidOperationException("Scheme: " + external.Scheme));
+            return;
+        }
+
         if (!Uri.TryCreate(e.Uri, UriKind.Absolute, out var target) ||
             !IsAllowedNavigationUri(target) ||
             IsBlockedNavigationUri(target))
         {
             e.Cancel = true;
             _status.Text = "העמוד המבוקש חסום בעמדה זו.";
+            AppDiagnostics.Write("Navigation blocked", new InvalidOperationException("Blocked URI: " + e.Uri));
         }
     }
 
@@ -1340,37 +1389,18 @@ internal sealed class MainForm : Form
 
     private void OnLaunchingExternalUriScheme(object? sender, CoreWebView2LaunchingExternalUriSchemeEventArgs e)
     {
-        // The official Rav-Kav Online site starts its installed card-reader helper
-        // through a registered Windows URI protocol. Allow only that protocol.
-        if (Uri.TryCreate(e.Uri, UriKind.Absolute, out var target) &&
-            (target.Scheme.Equals("ravkavonline", StringComparison.OrdinalIgnoreCase) ||
-             target.Scheme.Equals("ravkavonline.exe", StringComparison.OrdinalIgnoreCase)))
+        if (Uri.TryCreate(e.Uri, UriKind.Absolute, out var target) && IsRavKavReaderProtocol(target))
         {
-            e.Cancel = true;
-            try
-            {
-                // Hand the registered URI protocol to Windows Shell so the
-                // installed card-reader helper starts automatically.
-                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-                {
-                    FileName = e.Uri,
-                    UseShellExecute = true
-                });
-                _status.Text = "תוכנת קורא הכרטיסים נשלחה להפעלה...";
-                AppDiagnostics.Write("Card-reader launch requested", new InvalidOperationException("Protocol: " + target.Scheme));
-            }
-            catch (Exception ex)
-            {
-                _status.Text = "לא ניתן להפעיל את קורא הכרטיסים. יש לוודא שהתוכנה מותקנת.";
-                AppDiagnostics.Write("Card-reader launch failed", ex);
-                MessageBox.Show(this,
-                    "Windows לא הצליח להפעיל את תוכנת קורא הכרטיסים. ודא שהיא מותקנת ורשומה במערכת, ואז נסה שוב.\r\n\r\n" + ex.Message,
-                    "הפעלת קורא הכרטיסים", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            }
+            // Cancel=false is intentional: WebView2 displays its native
+            // "open external application?" confirmation and launches the
+            // registered card-reader application after the user approves.
+            e.Cancel = false;
+            _status.Text = "אשר בחלונית שתופיע את הפעלת קורא הכרטיסים.";
+            AppDiagnostics.Write("Reader protocol confirmation shown", new InvalidOperationException("URI: " + e.Uri));
             return;
         }
 
         e.Cancel = true;
         _status.Text = "קישור חיצוני שאינו של קורא הכרטיסים נחסם.";
-    }
-}
+        AppDiagnostics.Write("External protocol blocked", new InvalidOperationException("URI: " + e.Uri));
+    }}
