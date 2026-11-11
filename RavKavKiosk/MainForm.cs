@@ -28,6 +28,7 @@ internal sealed class MainForm : Form
     private PictureBox? _daatLogoBox;
     private PictureBox? _partnerLogoBox;
     private PremiumCardPanel? _ravKavPanel;
+    private PremiumCardPanel? _hopOnPanel;
     private int _adminHotspotClicks;
     private DateTime _lastAdminHotspotClickUtc;
 
@@ -152,7 +153,7 @@ internal sealed class MainForm : Form
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 56));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 104));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 112));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
         // Top utility strip
@@ -294,9 +295,21 @@ internal sealed class MainForm : Form
         layout.Controls.Add(searchHost, 0, 2);
         layout.Controls.Add(filters, 0, 3);
         layout.Controls.Add(sectionHeader, 0, 4);
+        var ravKavOptions = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1,
+            BackColor = Color.Transparent, Margin = new Padding(0)
+        };
+        ravKavOptions.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+        ravKavOptions.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+        var savedPolicy = AdminPolicyStore.Load();
         _ravKavPanel = BuildRavKavPanel();
-        _ravKavPanel.Visible = AdminPolicyStore.Load().ShowRavKavPanel;
-        layout.Controls.Add(_ravKavPanel, 0, 5);
+        _ravKavPanel.Visible = savedPolicy.ShowRavKavPanel;
+        _hopOnPanel = BuildHopOnPanel();
+        _hopOnPanel.Visible = savedPolicy.ShowHopOnPanel;
+        ravKavOptions.Controls.Add(_ravKavPanel, 0, 0);
+        ravKavOptions.Controls.Add(_hopOnPanel, 1, 0);
+        layout.Controls.Add(ravKavOptions, 0, 5);
         layout.Controls.Add(_cardsPanel, 0, 6);
         _home.Controls.Add(layout);
         _cardsPanel.Resize += (_, _) => ResizeExistingCards();
@@ -362,11 +375,62 @@ internal sealed class MainForm : Form
         return panel;
     }
 
+    private PremiumCardPanel BuildHopOnPanel()
+    {
+        var panel = new PremiumCardPanel
+        {
+            Dock = DockStyle.Fill, Margin = new Padding(5), Padding = new Padding(18, 10, 18, 10),
+            GradientTop = Color.FromArgb(35, 57, 91), GradientBottom = Color.FromArgb(17, 32, 57),
+            BorderColor = Color.FromArgb(83, 119, 164), HoverBorderColor = Color.FromArgb(120, 177, 231),
+            Cursor = Cursors.Hand, AccessibleRole = AccessibleRole.Link,
+            AccessibleName = "פתיחת שירות טעינת רב-קו HopOn"
+        };
+        var open = new Button
+        {
+            Text = "פתיחת HopOn  ←", Dock = DockStyle.Left, Width = 190,
+            FlatStyle = FlatStyle.Flat, BackColor = Color.FromArgb(57, 104, 160),
+            ForeColor = Color.White, Font = new Font("Segoe UI", 10, FontStyle.Bold),
+            Cursor = Cursors.Hand, UseVisualStyleBackColor = false
+        };
+        open.FlatAppearance.BorderColor = Color.FromArgb(120, 164, 210);
+        open.FlatAppearance.BorderSize = 1;
+        var details = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2, BackColor = Color.Transparent };
+        details.RowStyles.Add(new RowStyle(SizeType.Percent, 55));
+        details.RowStyles.Add(new RowStyle(SizeType.Percent, 45));
+        details.Controls.Add(new Label
+        {
+            Text = "טעינת רב-קו · HopOn", Dock = DockStyle.Fill, ForeColor = Color.FromArgb(255, 222, 161),
+            Font = new Font("Segoe UI", 15, FontStyle.Bold), TextAlign = ContentAlignment.BottomRight,
+            BackColor = Color.Transparent
+        }, 0, 0);
+        details.Controls.Add(new Label
+        {
+            Text = "מעבר לשירות הטעינה והמשך לתשלום", Dock = DockStyle.Fill,
+            ForeColor = Color.FromArgb(195, 211, 229), Font = new Font("Segoe UI", 9),
+            TextAlign = ContentAlignment.TopRight, BackColor = Color.Transparent
+        }, 0, 1);
+        async void OpenHopOn(object? sender, EventArgs e) =>
+            await OpenOfficialServiceAsync(_settings.StartUrl, "HopOn – טעינת רב-קו");
+        open.Click += OpenHopOn;
+        details.Click += OpenHopOn;
+        panel.Click += OpenHopOn;
+        panel.Controls.Add(details);
+        panel.Controls.Add(open);
+        return panel;
+    }
+
     private void SetRavKavPanelVisibility(bool visible)
     {
         if (_ravKavPanel is null || _ravKavPanel.IsDisposed) return;
         _ravKavPanel.Visible = visible;
-        if (_ravKavPanel.Parent is not null) _ravKavPanel.Parent.PerformLayout();
+        _ravKavPanel.Parent?.PerformLayout();
+    }
+
+    private void SetHopOnPanelVisibility(bool visible)
+    {
+        if (_hopOnPanel is null || _hopOnPanel.IsDisposed) return;
+        _hopOnPanel.Visible = visible;
+        _hopOnPanel.Parent?.PerformLayout();
     }
 
     private static string? ResolveBackgroundImagePath()
@@ -929,6 +993,7 @@ internal sealed class MainForm : Form
         _adminManager.RulesChanged += () => { _ = ApplyElementRulesAsync(); _ = ApplyRouteRulesAsync(); };
         _adminManager.AdminModeChanged += SetAdminMode;
         _adminManager.RavKavPanelVisibilityChanged += SetRavKavPanelVisibility;
+        _adminManager.HopOnPanelVisibilityChanged += SetHopOnPanelVisibility;
         _adminManager.FormClosed += (_, _) => { _adminManager = null; SetAdminMode(false); };
         _adminManager.Show(this);
     }
