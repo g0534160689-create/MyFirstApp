@@ -27,6 +27,9 @@ internal sealed class MainForm : Form
     private BufferedPanel? _heroPanel;
     private PictureBox? _daatLogoBox;
     private PictureBox? _partnerLogoBox;
+    private PremiumCardPanel? _ravKavPanel;
+    private int _adminHotspotClicks;
+    private DateTime _lastAdminHotspotClickUtc;
 
     private static readonly Color Navy = Color.FromArgb(14, 27, 48);
     private static readonly Color Blue = Color.FromArgb(49, 91, 133);
@@ -83,10 +86,21 @@ internal sealed class MainForm : Form
             Location = new Point(0, 0),
             Size = new Size(54, 64),
             BackColor = Color.Transparent,
-            Cursor = Cursors.Hand,
+            Cursor = Cursors.Default,
             TabStop = false
         };
-        adminHotspot.Click += (_, _) => OpenAdminManager();
+        adminHotspot.Click += (_, _) =>
+        {
+            var now = DateTime.UtcNow;
+            if ((now - _lastAdminHotspotClickUtc).TotalSeconds > 4) _adminHotspotClicks = 0;
+            _lastAdminHotspotClickUtc = now;
+            _adminHotspotClicks++;
+            if (_adminHotspotClicks >= 5)
+            {
+                _adminHotspotClicks = 0;
+                OpenAdminManager();
+            }
+        };
         header.Controls.Add(adminHotspot);
         adminHotspot.BringToFront();
 
@@ -129,7 +143,7 @@ internal sealed class MainForm : Form
 
         var layout = new TableLayoutPanel
         {
-            Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 6,
+            Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 7,
             Padding = new Padding(34, 18, 34, 20),
             BackColor = Color.Transparent
         };
@@ -138,6 +152,7 @@ internal sealed class MainForm : Form
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 56));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 104));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
         // Top utility strip
@@ -279,11 +294,78 @@ internal sealed class MainForm : Form
         layout.Controls.Add(searchHost, 0, 2);
         layout.Controls.Add(filters, 0, 3);
         layout.Controls.Add(sectionHeader, 0, 4);
-        layout.Controls.Add(_cardsPanel, 0, 5);
+        _ravKavPanel = BuildRavKavPanel();
+        _ravKavPanel.Visible = AdminPolicyStore.Load().ShowRavKavPanel;
+        layout.Controls.Add(_ravKavPanel, 0, 5);
+        layout.Controls.Add(_cardsPanel, 0, 6);
         _home.Controls.Add(layout);
         _cardsPanel.Resize += (_, _) => ResizeExistingCards();
         RenderCards();
-    }    private static string? ResolveBackgroundImagePath()
+    }    private PremiumCardPanel BuildRavKavPanel()
+    {
+        var panel = new PremiumCardPanel
+        {
+            Dock = DockStyle.Fill, Margin = new Padding(3, 5, 3, 5),
+            Padding = new Padding(20, 10, 20, 10),
+            GradientTop = Color.FromArgb(34, 67, 72),
+            GradientBottom = Color.FromArgb(17, 42, 51),
+            BorderColor = Color.FromArgb(81, 139, 128),
+            HoverBorderColor = Color.FromArgb(119, 213, 178),
+            Cursor = Cursors.Hand,
+            AccessibleRole = AccessibleRole.Link,
+            AccessibleName = "פתיחת שירות רב-קו אונליין"
+        };
+        var open = new Button
+        {
+            Text = "פתיחת רב-קו אונליין  ←",
+            Dock = DockStyle.Left,
+            Width = 230,
+            Height = 48,
+            Margin = new Padding(5),
+            FlatStyle = FlatStyle.Flat,
+            BackColor = Color.FromArgb(75, 139, 112),
+            ForeColor = Color.White,
+            Font = new Font("Segoe UI", 11, FontStyle.Bold),
+            Cursor = Cursors.Hand,
+            UseVisualStyleBackColor = false
+        };
+        open.FlatAppearance.BorderColor = Color.FromArgb(125, 190, 157);
+        open.FlatAppearance.BorderSize = 1;
+        var description = new Label
+        {
+            Text = "טעינת כרטיס, בדיקת יתרה וניהול נסיעות באמצעות קורא כרטיסים",
+            Dock = DockStyle.Fill,
+            ForeColor = Color.FromArgb(198, 218, 215),
+            Font = new Font("Segoe UI", 9),
+            TextAlign = ContentAlignment.MiddleRight,
+            BackColor = Color.Transparent
+        };
+        var title = new Label
+        {
+            Text = "רב-קו אונליין",
+            Dock = DockStyle.Right,
+            Width = 210,
+            ForeColor = Color.FromArgb(255, 224, 164),
+            Font = new Font("Segoe UI", 17, FontStyle.Bold),
+            TextAlign = ContentAlignment.MiddleRight,
+            BackColor = Color.Transparent
+        };
+        open.Click += async (_, _) => await OpenOfficialServiceAsync(_settings.RavKavStartUrl, "רב-קו אונליין");
+        panel.Click += async (_, _) => await OpenOfficialServiceAsync(_settings.RavKavStartUrl, "רב-קו אונליין");
+        panel.Controls.Add(description);
+        panel.Controls.Add(title);
+        panel.Controls.Add(open);
+        return panel;
+    }
+
+    private void SetRavKavPanelVisibility(bool visible)
+    {
+        if (_ravKavPanel is null || _ravKavPanel.IsDisposed) return;
+        _ravKavPanel.Visible = visible;
+        if (_ravKavPanel.Parent is not null) _ravKavPanel.Parent.PerformLayout();
+    }
+
+    private static string? ResolveBackgroundImagePath()
     {
         // Support both the packaged Assets folder and a manually copied image
         // beside the EXE or in the user's local application-data folder.
@@ -842,6 +924,7 @@ internal sealed class MainForm : Form
         _adminManager.ScanLinksRequested += ScanCurrentPageLinks;
         _adminManager.RulesChanged += () => { _ = ApplyElementRulesAsync(); _ = ApplyRouteRulesAsync(); };
         _adminManager.AdminModeChanged += SetAdminMode;
+        _adminManager.RavKavPanelVisibilityChanged += SetRavKavPanelVisibility;
         _adminManager.FormClosed += (_, _) => { _adminManager = null; SetAdminMode(false); };
         _adminManager.Show(this);
     }
