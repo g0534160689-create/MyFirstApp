@@ -10,6 +10,7 @@ internal sealed class AdminPolicy
     public List<string> AllowedHosts { get; set; } = [];
     public bool ShowRavKavPanel { get; set; } = true;
     public bool ShowHopOnPanel { get; set; } = true;
+    public string ThemeId { get; set; } = "midnight";
     public List<RoutePolicyRule> Routes { get; set; } = [];
     public List<ElementPolicyRule> Elements { get; set; } = [];
 }
@@ -180,6 +181,7 @@ internal sealed class AdminManagerForm : Form
     public event Action<bool>? AdminModeChanged;
     public event Action<bool>? RavKavPanelVisibilityChanged;
     public event Action<bool>? HopOnPanelVisibilityChanged;
+    public event Action<string>? ThemeChanged;
     private bool adminMode;
     private Button? adminModeButton;
     public AdminManagerForm(string url)
@@ -238,6 +240,33 @@ internal sealed class AdminManagerForm : Form
             HopOnPanelVisibilityChanged?.Invoke(hopOnVisible.Checked);
         };
         adminStrip.Controls.Add(hopOnVisible);
+        var themePicker = new ComboBox
+        {
+            DropDownStyle = ComboBoxStyle.DropDownList,
+            Width = 155,
+            Height = 30,
+            Font = new Font("Segoe UI", 9),
+            Margin = new Padding(6, 3, 6, 0)
+        };
+        themePicker.Items.AddRange(new object[]
+        {
+            "לילה יוקרתי", "כחול מודרני", "ירוק מרענן", "סגול אלגנטי", "אפור גרפיט"
+        });
+        themePicker.SelectedIndex = policy.ThemeId switch
+        {
+            "blue" => 1, "green" => 2, "purple" => 3, "graphite" => 4, _ => 0
+        };
+        themePicker.SelectedIndexChanged += (_, _) =>
+        {
+            policy.ThemeId = themePicker.SelectedIndex switch
+            {
+                1 => "blue", 2 => "green", 3 => "purple", 4 => "graphite", _ => "midnight"
+            };
+            AdminPolicyStore.Save(policy);
+            ThemeChanged?.Invoke(policy.ThemeId);
+        };
+        adminStrip.Controls.Add(new Label { Text = "ערכת נושא:", AutoSize = true, Padding = new Padding(8, 8, 0, 0) });
+        adminStrip.Controls.Add(themePicker);
         adminStrip.Controls.Add(new Label { Text = "המצב פתוח רק כל עוד חלון הניהול פעיל", AutoSize = true, Padding = new Padding(8, 8, 0, 0) });
         root.Controls.Add(adminStrip, 0, 1);
         var route = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft, WrapContents = true };
