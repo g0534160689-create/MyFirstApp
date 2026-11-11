@@ -8,6 +8,7 @@ internal sealed class AdminPolicy
 {
     public AdminPolicy() { }
     public List<string> AllowedHosts { get; set; } = [];
+    public bool ShowRavKavPanel { get; set; } = true;
     public List<RoutePolicyRule> Routes { get; set; } = [];
     public List<ElementPolicyRule> Elements { get; set; } = [];
 }
@@ -176,6 +177,7 @@ internal sealed class AdminManagerForm : Form
     public event Action? ScanLinksRequested;
     public event Action? RulesChanged;
     public event Action<bool>? AdminModeChanged;
+    public event Action<bool>? RavKavPanelVisibilityChanged;
     private bool adminMode;
     private Button? adminModeButton;
     public AdminManagerForm(string url)
@@ -206,6 +208,20 @@ internal sealed class AdminManagerForm : Form
             AdminModeChanged?.Invoke(adminMode);
         };
         adminStrip.Controls.Add(adminModeButton);
+        var ravKavVisible = new CheckBox
+        {
+            Text = "הצג חלונית רב-קו במסך הראשי",
+            AutoSize = true,
+            Checked = policy.ShowRavKavPanel,
+            Padding = new Padding(8, 8, 0, 0)
+        };
+        ravKavVisible.CheckedChanged += (_, _) =>
+        {
+            policy.ShowRavKavPanel = ravKavVisible.Checked;
+            AdminPolicyStore.Save(policy);
+            RavKavPanelVisibilityChanged?.Invoke(ravKavVisible.Checked);
+        };
+        adminStrip.Controls.Add(ravKavVisible);
         adminStrip.Controls.Add(new Label { Text = "המצב פתוח רק כל עוד חלון הניהול פעיל", AutoSize = true, Padding = new Padding(8, 8, 0, 0) });
         root.Controls.Add(adminStrip, 0, 1);
         var route = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft, WrapContents = true };
