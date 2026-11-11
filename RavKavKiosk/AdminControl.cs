@@ -9,6 +9,7 @@ internal sealed class AdminPolicy
     public AdminPolicy() { }
     public List<string> AllowedHosts { get; set; } = [];
     public bool ShowRavKavPanel { get; set; } = true;
+    public bool ShowHopOnPanel { get; set; } = true;
     public List<RoutePolicyRule> Routes { get; set; } = [];
     public List<ElementPolicyRule> Elements { get; set; } = [];
 }
@@ -178,6 +179,7 @@ internal sealed class AdminManagerForm : Form
     public event Action? RulesChanged;
     public event Action<bool>? AdminModeChanged;
     public event Action<bool>? RavKavPanelVisibilityChanged;
+    public event Action<bool>? HopOnPanelVisibilityChanged;
     private bool adminMode;
     private Button? adminModeButton;
     public AdminManagerForm(string url)
@@ -222,6 +224,20 @@ internal sealed class AdminManagerForm : Form
             RavKavPanelVisibilityChanged?.Invoke(ravKavVisible.Checked);
         };
         adminStrip.Controls.Add(ravKavVisible);
+        var hopOnVisible = new CheckBox
+        {
+            Text = "הצג חלונית HopOn",
+            AutoSize = true,
+            Checked = policy.ShowHopOnPanel,
+            Padding = new Padding(8, 8, 0, 0)
+        };
+        hopOnVisible.CheckedChanged += (_, _) =>
+        {
+            policy.ShowHopOnPanel = hopOnVisible.Checked;
+            AdminPolicyStore.Save(policy);
+            HopOnPanelVisibilityChanged?.Invoke(hopOnVisible.Checked);
+        };
+        adminStrip.Controls.Add(hopOnVisible);
         adminStrip.Controls.Add(new Label { Text = "המצב פתוח רק כל עוד חלון הניהול פעיל", AutoSize = true, Padding = new Padding(8, 8, 0, 0) });
         root.Controls.Add(adminStrip, 0, 1);
         var route = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft, WrapContents = true };
