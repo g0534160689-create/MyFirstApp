@@ -350,8 +350,12 @@ internal sealed class MainForm : Form
             TextAlign = ContentAlignment.MiddleRight,
             BackColor = Color.Transparent
         };
-        open.Click += async (_, _) => await OpenOfficialServiceAsync(_settings.RavKavStartUrl, "רב-קו אונליין");
-        panel.Click += async (_, _) => await OpenOfficialServiceAsync(_settings.RavKavStartUrl, "רב-קו אונליין");
+        async void OpenRavKav(object? sender, EventArgs e) =>
+            await OpenOfficialServiceAsync(_settings.RavKavStartUrl, "רב-קו אונליין");
+        open.Click += OpenRavKav;
+        title.Click += OpenRavKav;
+        description.Click += OpenRavKav;
+        panel.Click += OpenRavKav;
         panel.Controls.Add(description);
         panel.Controls.Add(title);
         panel.Controls.Add(open);
