@@ -1,0 +1,62 @@
+name: Build independent Rav-Kav kiosk V2
+
+on:
+  push:
+    branches: [ main, "rewrite/independent-kiosk-v2" ]
+    paths:
+      - "RavKavKioskV2/**"
+      - "installer/RavKavKioskV2.iss"
+      - ".github/workflows/build-v2.yml"
+  pull_request:
+    branches: [ main ]
+    paths:
+      - "RavKavKioskV2/**"
+      - "installer/RavKavKioskV2.iss"
+      - ".github/workflows/build-v2.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-v2:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Install Inno Setup
+        run: choco install innosetup --yes --no-progress
+
+      - name: Download offline WebView2 Runtime installer
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force webview2 | Out-Null
+          Invoke-WebRequest -Uri "https://aka.ms/WebView2EvergreenStandaloneInstallerX64" -OutFile "webview2/MicrosoftEdgeWebView2RuntimeInstallerX64.exe"
+
+      - name: Publish independent V2 application
+        run: dotnet publish RavKavKioskV2/RavKavKioskV2.csproj --configuration Release --runtime win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish-v2
+
+      - name: Build V2 installer
+        run: iscc /DMyAppVersion=2.0.${{ github.run_number }} installer/RavKavKioskV2.iss
+
+      - name: Verify installer exists
+        shell: pwsh
+        run: |
+          $setup = Join-Path $PWD "installer-output/RavKavKiosk-V2-Setup.exe"
+          if (-not (Test-Path $setup)) { throw "V2 installer was not created: $setup" }
+          Get-Item $setup | Format-List FullName,Length
+
+      - name: Upload V2 installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: RavKavKiosk-V2-Setup-win-x64
+          path: installer-output/RavKavKiosk-V2-Setup.exe
+          if-no-files-found: error
+          retention-days: 30
