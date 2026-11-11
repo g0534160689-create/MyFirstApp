@@ -9,6 +9,7 @@ internal sealed class AppSettings
     public string RavKavStartUrl { get; set; } = "https://ravkavonline.co.il/he/store/connect";
     public string RavKavHost { get; set; } = "ravkavonline.co.il";
     public string RavKavAllowedPath { get; set; } = "/he/store/connect";
+    public List<string> HopOnPaymentPaths { get; set; } = ["/pay"];
     public List<string> PortalAllowedHosts { get; set; } =
     [
         "donors.matara.pro",
@@ -50,7 +51,8 @@ internal sealed class AppSettings
 
         var adminDecision = AdminPolicyStore.RouteDecision(uri);
         if (adminDecision.HasValue) return adminDecision.Value;
-        return uri.Host.Equals(AllowedHost, StringComparison.OrdinalIgnoreCase) ||
+        return (uri.Host.Equals(AllowedHost, StringComparison.OrdinalIgnoreCase) ||
+                uri.Host.Equals("www.hopon.co.il", StringComparison.OrdinalIgnoreCase)) ||
                uri.Host.Equals(RavKavHost, StringComparison.OrdinalIgnoreCase) ||
                (PortalAllowedHosts ?? []).Any(host =>
                    uri.Host.Equals(host, StringComparison.OrdinalIgnoreCase)) ||
@@ -59,7 +61,8 @@ internal sealed class AppSettings
 
     public bool IsHopOnUri(Uri uri) =>
         uri.IsAbsoluteUri &&
-        uri.Host.Equals(AllowedHost, StringComparison.OrdinalIgnoreCase);
+        (uri.Host.Equals(AllowedHost, StringComparison.OrdinalIgnoreCase) ||
+         uri.Host.Equals("www.hopon.co.il", StringComparison.OrdinalIgnoreCase));
 
     public bool IsRavKavUri(Uri uri) =>
         uri.IsAbsoluteUri &&
@@ -87,6 +90,15 @@ internal sealed class AppSettings
 
         var normalizedPath = NormalizePath(uri.AbsolutePath);
         if (normalizedPath is null) return true;
+
+        // Keep HopOn checkout and payment pages available throughout the purchase flow.
+        if ((HopOnPaymentPaths ?? ["/pay"]).Any(root =>
+        {
+            var paymentRoot = NormalizePath(root);
+            return !string.IsNullOrEmpty(paymentRoot) &&
+                   (normalizedPath.Equals(paymentRoot, StringComparison.OrdinalIgnoreCase) ||
+                    normalizedPath.StartsWith(paymentRoot.TrimEnd('/') + "/", StringComparison.OrdinalIgnoreCase));
+        })) return false;
 
         return (BlockedPaths ?? []).Any(blocked =>
         {
