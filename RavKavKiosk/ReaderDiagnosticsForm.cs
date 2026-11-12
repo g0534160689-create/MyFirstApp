@@ -85,6 +85,9 @@ internal sealed class ReaderDiagnosticsForm : Form
         CheckProtocol(lines, "ravkav");
         CheckProtocol(lines, "ravkavonline");
         CheckProtocol(lines, "ravkavonline.exe");
+        lines.AddRange(FindRelatedProtocolRegistrations());
+        lines.AddRange(FindInstalledReaderApplications());
+        lines.AddRange(FindReaderProcesses());
 
         lines.Add("");
         lines.Add("=== שירות Windows Smart Card ===");
@@ -106,6 +109,100 @@ internal sealed class ReaderDiagnosticsForm : Form
         report.Text = string.Join(Environment.NewLine, lines);
         report.SelectionStart = 0;
         report.SelectionLength = 0;
+    }
+
+    private static IEnumerable<string> FindRelatedProtocolRegistrations()
+    {
+        var lines = new List<string> { "", "=== פרוטוקולים נוספים הקשורים לתוכנת הקורא ===" };
+        var roots = new[]
+        {
+            (RegistryHive.CurrentUser, RegistryView.Registry64, @"Software\Classes"),
+            (RegistryHive.LocalMachine, RegistryView.Registry64, @"Software\Classes"),
+            (RegistryHive.LocalMachine, RegistryView.Registry32, @"Software\Classes")
+        };
+        var found = 0;
+        foreach (var (hive, view, path) in roots)
+        {
+            try
+            {
+                using var baseKey = RegistryKey.OpenBaseKey(hive, view);
+                using var classes = baseKey.OpenSubKey(path);
+                if (classes is null) continue;
+                foreach (var name in classes.GetSubKeyNames())
+                {
+                    if (!name.Contains("ravkav", StringComparison.OrdinalIgnoreCase)) continue;
+                    using var key = classes.OpenSubKey(name);
+                    using var commandKey = key?.OpenSubKey(@"shell\open\command");
+                    var command = commandKey?.GetValue(null)?.ToString();
+                    var isProtocol = key?.GetValue("URL Protocol") is not null;
+                    if (!isProtocol && string.IsNullOrWhiteSpace(command)) continue;
+                    lines.Add(hive + "/" + view + " " + name + ": " + (isProtocol ? "URL Protocol" : "רישום יישום"));
+                    if (!string.IsNullOrWhiteSpace(command)) lines.Add("  פקודה: " + command);
+                    found++;
+                }
+            }
+            catch (Exception ex) { lines.Add("שגיאה בקריאת " + hive + "/" + view + ": " + ex.Message); }
+        }
+        if (found == 0) lines.Add("לא נמצאו רישומי פרוטוקול או מפתחות בשם RavKav במאגרי המשתמש והמחשב.");
+        return lines;
+    }
+
+    private static IEnumerable<string> FindInstalledReaderApplications()
+    {
+        var lines = new List<string> { "", "=== התקנות תוכנה הקשורות לרב-קו ===" };
+        var locations = new[]
+        {
+            (RegistryHive.CurrentUser, RegistryView.Registry64, @"Software\Microsoft\Windows\CurrentVersion\Uninstall"),
+            (RegistryHive.LocalMachine, RegistryView.Registry64, @"Software\Microsoft\Windows\CurrentVersion\Uninstall"),
+            (RegistryHive.LocalMachine, RegistryView.Registry32, @"Software\Microsoft\Windows\CurrentVersion\Uninstall")
+        };
+        var found = 0;
+        foreach (var (hive, view, path) in locations)
+        {
+            try
+            {
+                using var baseKey = RegistryKey.OpenBaseKey(hive, view);
+                using var uninstall = baseKey.OpenSubKey(path);
+                if (uninstall is null) continue;
+                foreach (var subName in uninstall.GetSubKeyNames())
+                {
+                    using var app = uninstall.OpenSubKey(subName);
+                    var name = app?.GetValue("DisplayName")?.ToString() ?? "";
+                    if (!name.Contains("ravkav", StringComparison.OrdinalIgnoreCase) &&
+                        !name.Contains("רב-קו", StringComparison.OrdinalIgnoreCase)) continue;
+                    lines.Add(name);
+                    foreach (var valueName in new[] { "DisplayVersion", "InstallLocation", "DisplayIcon", "UninstallString" })
+                    {
+                        var value = app?.GetValue(valueName)?.ToString();
+                        if (!string.IsNullOrWhiteSpace(value)) lines.Add("  " + valueName + ": " + value);
+                    }
+                    found++;
+                }
+            }
+            catch (Exception ex) { lines.Add("שגיאה בסריקת התקנות " + hive + "/" + view + ": " + ex.Message); }
+        }
+        if (found == 0) lines.Add("לא נמצאה תוכנת רב-קו ברשימת התוכנות המותקנות.");
+        return lines;
+    }
+
+    private static IEnumerable<string> FindReaderProcesses()
+    {
+        var lines = new List<string> { "", "=== תהליכי קורא פעילים ===" };
+        var found = 0;
+        foreach (var process in Process.GetProcesses())
+        {
+            try
+            {
+                if (!process.ProcessName.Contains("ravkav", StringComparison.OrdinalIgnoreCase)) continue;
+                lines.Add(process.ProcessName + " (PID " + process.Id + ")");
+                try { lines.Add("  נתיב: " + process.MainModule?.FileName); } catch { }
+                found++;
+            }
+            catch { }
+            finally { process.Dispose(); }
+        }
+        if (found == 0) lines.Add("לא נמצא כרגע תהליך בשם RavKav.");
+        return lines;
     }
 
     private static void CheckProtocol(List<string> lines, string scheme)
