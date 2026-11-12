@@ -1036,18 +1036,32 @@ internal sealed class MainForm : Form
     private bool IsBlockedNavigationUri(Uri uri)
     {
         if (!IsSecureWebNavigationUri(uri)) return true;
+
+        // The Rav-Kav flow is multi-domain and multi-stage. The built-in blacklist
+        // must never interrupt card identification, contract selection, payment,
+        // 3-D Secure, reader communication or the final write/confirmation page.
+        if (_activeServiceProfile == "RavKavOnline")
+            return false;
+
+        // External HTTPS hosts are part of the active checkout/authentication flow.
+        // Apply the kiosk blacklist only to the HopOn site itself.
+        if (_activeServiceProfile == "HopOn" && !_settings.IsHopOnUri(uri))
+            return false;
+
+        // Payment paths are protected even if an older administrator rule denied them.
+        if (_settings.IsHopOnUri(uri) && (_settings.HopOnPaymentPaths ?? ["/pay"]).Any(root =>
+        {
+            var normalized = root.TrimEnd('/');
+            return uri.AbsolutePath.Equals(normalized, StringComparison.OrdinalIgnoreCase) ||
+                   uri.AbsolutePath.StartsWith(normalized + "/", StringComparison.OrdinalIgnoreCase);
+        }))
+            return false;
+
         var adminDecision = AdminPolicyStore.RouteDecision(uri);
         if (adminDecision.HasValue) return !adminDecision.Value;
 
-        // Keep HopOn's intentionally blocked information/map routes blocked,
-        // but do not restrict its checkout path or the independent payment domain.
-        if (_activeServiceProfile == "HopOn" && _settings.IsHopOnUri(uri))
-            return _settings.IsBlockedNavigationUri(uri);
-
-        // Rav-Kav Online has several stages after /he/store/connect (card scan,
-        // contract selection, payment, reader write and confirmation). Do not
-        // pin it to the entry URL; all secure routes in its active transaction work.
-        return false;
+        return _activeServiceProfile == "HopOn" && _settings.IsHopOnUri(uri) &&
+               _settings.IsBlockedNavigationUri(uri);
     }
 
     private static bool IsSecureWebNavigationUri(Uri uri) =>
@@ -1210,17 +1224,56 @@ internal sealed class MainForm : Form
     {
         if (!_browserInitialized || _browser.CoreWebView2 is null) return;
         if (!Uri.TryCreate(_browser.CoreWebView2.Source, UriKind.Absolute, out var uri)) return;
-        var rules = AdminPolicyStore.ElementRules(uri.Host).Where(r => !r.Allowed).Select(r => r.Selector).ToArray();
+        var rules = AdminPolicyStore.ElementRules(uri.Host)
+            .Where(r => !r.Allowed)
+            .Select(r => new { selector = r.Selector, replacementText = r.ReplacementText ?? "" })
+            .ToArray();
         var json = JsonSerializer.Serialize(rules);
         var script = """
         (() => {
-          const id = "__ravkav_admin_element_rules";
-          document.getElementById(id)?.remove();
           const rules = __RULES__;
-          if (!rules.length) return;
-          const style = document.createElement("style"); style.id = id;
-          style.textContent = rules.map(s => s + " { display:none !important; visibility:hidden !important; }").join("\\n");
-          (document.head || document.documentElement).appendChild(style);
+          const marker = "data-kiosk-replacement-for";
+          const apply = () => {
+            for (const rule of rules) {
+              let elements;
+              try { elements = document.querySelectorAll(rule.selector); } catch { continue; }
+              for (const el of elements) {
+                if (!(el instanceof HTMLElement) || el.hasAttribute("data-kiosk-replacement")) continue;
+                if (rule.replacementText) {
+                  const replacement = document.createElement("div");
+                  replacement.setAttribute("data-kiosk-replacement", "true");
+                  replacement.setAttribute(marker, rule.selector);
+                  const computed = getComputedStyle(el);
+                  replacement.textContent = rule.replacementText;
+                  replacement.style.boxSizing = computed.boxSizing;
+                  replacement.style.display = computed.display === "none" ? "block" : computed.display;
+                  replacement.style.width = computed.width;
+                  replacement.style.minHeight = computed.height === "auto" ? "" : computed.height;
+                  replacement.style.margin = computed.margin;
+                  replacement.style.padding = computed.padding;
+                  replacement.style.textAlign = computed.textAlign;
+                  replacement.style.font = computed.font;
+                  replacement.style.color = computed.color;
+                  replacement.style.background = computed.backgroundColor;
+                  replacement.style.border = computed.border;
+                  replacement.style.borderRadius = computed.borderRadius;
+                  replacement.style.overflow = "hidden";
+                  el.parentNode?.insertBefore(replacement, el);
+                }
+                el.style.setProperty("display", "none", "important");
+                el.setAttribute("data-kiosk-hidden", "true");
+              }
+            }
+          };
+          apply();
+          if (!window.__kioskElementObserver) {
+            window.__kioskElementObserver = new MutationObserver(() => {
+              if (window.__kioskElementApplying) return;
+              window.__kioskElementApplying = true;
+              try { apply(); } finally { window.__kioskElementApplying = false; }
+            });
+            window.__kioskElementObserver.observe(document.documentElement, { childList: true, subtree: true });
+          }
         })();
         """.Replace("__RULES__", json, StringComparison.Ordinal);
         try { await _browser.CoreWebView2.ExecuteScriptAsync(script); }
@@ -1252,9 +1305,12 @@ internal sealed class MainForm : Form
         var blockedPaths = _settings.IsRavKavUri(serviceUri) ? Array.Empty<string>() : _settings.BlockedPaths.ToArray();
         var blockedPathsJson = JsonSerializer.Serialize(blockedPaths);
         var paymentPathsJson = JsonSerializer.Serialize(_settings.HopOnPaymentPaths ?? ["/pay"]);
-        var adminRulesJson = JsonSerializer.Serialize(AdminPolicyStore.Load().Routes
-            .Where(r => r.Host.Equals(serviceUri.Host, StringComparison.OrdinalIgnoreCase))
-            .Select(r => new { path = r.Path == "/" ? "/" : r.Path.TrimEnd('/').ToLowerInvariant(), allowed = r.Allowed }));
+        // Rav-Kav transaction routes must not inherit stale administrator deny rules.
+        var adminRulesJson = JsonSerializer.Serialize(_activeServiceProfile == "RavKavOnline"
+            ? Array.Empty<object>()
+            : AdminPolicyStore.Load().Routes
+                .Where(r => r.Host.Equals(serviceUri.Host, StringComparison.OrdinalIgnoreCase))
+                .Select(r => new { path = r.Path == "/" ? "/" : r.Path.TrimEnd('/').ToLowerInvariant(), allowed = r.Allowed }).ToArray());
 
         var script = """
         (() => {
