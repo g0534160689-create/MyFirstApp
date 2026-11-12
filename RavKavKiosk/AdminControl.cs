@@ -312,7 +312,7 @@ internal sealed class AdminManagerForm : Form
         var change = new Button { Text = "שינוי סיסמה", Width = 110 }; change.Click += (_, _) => AdminAuthentication.ChangePassword(this);
         actions.Controls.AddRange([pick, blockElement, allowElement, remove, change]); root.Controls.Add(actions, 0, 7);
     }
-    private static void ApplyPremiumStyle(Control parent)
+    private void ApplyPremiumStyle(Control parent)
     {
         foreach (Control control in parent.Controls)
         {
@@ -339,6 +339,13 @@ internal sealed class AdminManagerForm : Form
                     combo.ForeColor = Color.FromArgb(244, 247, 252);
                     combo.FlatStyle = FlatStyle.Flat;
                     break;
+                case Button button when button == adminModeButton:
+                    button.FlatStyle = FlatStyle.Flat;
+                    button.UseVisualStyleBackColor = false;
+                    button.ForeColor = Color.White;
+                    button.Font = new Font("Segoe UI", 9f, FontStyle.Bold);
+                    button.Cursor = Cursors.Hand;
+                    break;
                 case Button button:
                     button.FlatStyle = FlatStyle.Flat;
                     button.UseVisualStyleBackColor = false;
@@ -351,7 +358,7 @@ internal sealed class AdminManagerForm : Form
                     button.MouseEnter += (_, _) => button.BackColor = Color.FromArgb(43, 68, 96);
                     button.MouseLeave += (_, _) =>
                     {
-                        if (button == null || button.IsDisposed) return;
+                        if (button.IsDisposed) return;
                         button.BackColor = Color.FromArgb(31, 49, 72);
                     };
                     break;
