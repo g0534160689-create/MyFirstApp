@@ -574,7 +574,7 @@ internal sealed class AdminManagerForm : Form
             selected.Text = $"רכיב שנבחר (כלל קיים) | {element.Host}: {element.Selector}";
             return;
         }
-        var offset = policy.Routes.Count + policy.Elements.Count + policy.AllowedHosts.Count + 7 + AppSettings.Load().BlockedPaths.Count;
+        var offset = policy.Routes.Count + displayedElements.Count + policy.AllowedHosts.Count + 7 + AppSettings.Load().BlockedPaths.Count;
         var scannedIndex = index - offset;
         if (scannedIndex >= 0 && scannedIndex < scannedLinks.Count)
         {
