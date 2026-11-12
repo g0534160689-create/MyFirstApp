@@ -1585,33 +1585,69 @@ internal sealed class MainForm : Form
         }
     }
 
-    private void OnNewWindowRequested(object? sender, CoreWebView2NewWindowRequestedEventArgs e)
+    private async void OnNewWindowRequested(object? sender, CoreWebView2NewWindowRequestedEventArgs e)
     {
         if (Uri.TryCreate(e.Uri, UriKind.Absolute, out var target) && IsRavKavReaderProtocol(target))
         {
-            // Preserve the original popup navigation. Re-navigating the top-level
-            // WebView here discards the initiating frame/user-gesture context and
-            // causes WebView2 to report an empty InitiatingOrigin.
-            // Let WebView2 route the original URI to LaunchingExternalUriScheme.
+            // Custom reader URI is handled by LaunchingExternalUriScheme, not an HTTPS popup.
             e.Handled = false;
             AppDiagnostics.Write("Reader protocol popup forwarded",
                 details: "Scheme: " + target.Scheme + "; top-level: " + SafeOriginForLog(_browser.CoreWebView2?.Source ?? ""));
             return;
         }
 
-        if (Uri.TryCreate(e.Uri, UriKind.Absolute, out target) &&
-            IsAllowedNavigationUri(target) && !IsBlockedNavigationUri(target))
+        if (!Uri.TryCreate(e.Uri, UriKind.Absolute, out target) ||
+            !IsAllowedNavigationUri(target) || IsBlockedNavigationUri(target) ||
+            !target.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
         {
-            // Keep real popups as popups. Payment verification (3-D Secure),
-            // CAPTCHA and bank authentication often depend on window.opener/postMessage.
-            e.Handled = false;
-            AppDiagnostics.Write("Secure popup allowed", details: SafeOriginForLog(target.GetLeftPart(UriPartial.Authority)));
+            e.Handled = true;
+            _status.Text = "חלון קופץ נחסם: הכתובת אינה מאובטחת או אינה מאושרת.";
+            AppDiagnostics.Write("Popup blocked", details: "Invalid or blocked popup URI");
             return;
         }
 
-        e.Handled = true;
-        _status.Text = "חלון חיצוני לא מאובטח או חסום.";
-        AppDiagnostics.Write("Popup blocked", details: "Invalid or blocked popup URI");
+        // Create a real in-app WebView2 popup using the exact same environment/profile.
+        // This preserves window.opener/postMessage for authentication and reader flows.
+        var deferral = e.GetDeferral();
+        ServicePopupForm? popup = null;
+        try
+        {
+            var environment = _browser.CoreWebView2?.Environment
+                ?? throw new InvalidOperationException("WebView2 environment is not ready.");
+            popup = new ServicePopupForm();
+            await popup.InitializeAsync(environment);
+
+            popup.Core.NavigationStarting += (_, navigation) =>
+            {
+                if (!Uri.TryCreate(navigation.Uri, UriKind.Absolute, out var next) ||
+                    !IsAllowedNavigationUri(next) || IsBlockedNavigationUri(next) ||
+                    !next.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
+                {
+                    navigation.Cancel = true;
+                    AppDiagnostics.Write("Popup navigation blocked", details: "Unsafe popup redirect");
+                }
+            };
+
+            e.NewWindow = popup.Core;
+            e.Handled = false;
+            popup.FormClosed += (_, _) => popup.Dispose();
+            popup.Show(this);
+            _status.Text = "נפתח חלון מאובטח לאישור/השלמת הפעולה...";
+            AppDiagnostics.Write("Secure in-app popup opened",
+                details: SafeOriginForLog(target.GetLeftPart(UriPartial.Authority)) +
+                         "; user initiated: " + e.IsUserInitiated);
+        }
+        catch (Exception ex)
+        {
+            popup?.Dispose();
+            e.Handled = true;
+            _status.Text = "לא ניתן לפתוח חלון קופץ מאובטח.";
+            AppDiagnostics.Write("Secure popup creation failed", ex);
+        }
+        finally
+        {
+            deferral.Complete();
+        }
     }
 
     private void OnLaunchingExternalUriScheme(object? sender, CoreWebView2LaunchingExternalUriSchemeEventArgs e)
