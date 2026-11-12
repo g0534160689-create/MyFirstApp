@@ -1226,7 +1226,7 @@ internal sealed class MainForm : Form
         if (!Uri.TryCreate(_browser.CoreWebView2.Source, UriKind.Absolute, out var uri)) return;
         var rules = AdminPolicyStore.ElementRules(uri.Host)
             .Where(r => !r.Allowed)
-            .Select(r => new { selector = r.Selector, replacementText = r.ReplacementText ?? "" })
+            .Select(r => new { selector = r.Selector, replacementText = r.ReplacementText ?? "", replacementImageDataUri = TryLoadReplacementImageDataUri(r.ReplacementImagePath) })
             .ToArray();
         var json = JsonSerializer.Serialize(rules);
         var script = """
@@ -1250,13 +1250,12 @@ internal sealed class MainForm : Form
               try { elements = document.querySelectorAll(rule.selector); } catch { continue; }
               for (const el of elements) {
                 if (!(el instanceof HTMLElement) || el.hasAttribute("data-kiosk-replacement")) continue;
-                if (rule.replacementText && el.previousElementSibling?.getAttribute(marker) === rule.selector) continue;
-                if (rule.replacementText) {
+                if ((rule.replacementText || rule.replacementImageDataUri) && el.previousElementSibling?.getAttribute(marker) === rule.selector) continue;
+                if (rule.replacementText || rule.replacementImageDataUri) {
                   const replacement = document.createElement("div");
                   replacement.setAttribute("data-kiosk-replacement", "true");
                   replacement.setAttribute(marker, rule.selector);
                   const computed = getComputedStyle(el);
-                  replacement.textContent = rule.replacementText;
                   replacement.style.boxSizing = computed.boxSizing;
                   replacement.style.display = computed.display === "none" ? "block" : computed.display;
                   replacement.style.width = computed.width;
@@ -1270,6 +1269,11 @@ internal sealed class MainForm : Form
                   replacement.style.border = computed.border;
                   replacement.style.borderRadius = computed.borderRadius;
                   replacement.style.overflow = "hidden";
+                  if (rule.replacementImageDataUri) {
+                    const image = document.createElement("img"); image.src = rule.replacementImageDataUri; image.alt = "תמונה חלופית"; image.draggable = false;
+                    image.style.display = "block"; image.style.width = "100%"; image.style.height = "100%"; image.style.maxWidth = "100%"; image.style.maxHeight = "100%"; image.style.objectFit = "contain"; image.style.objectPosition = "center";
+                    replacement.appendChild(image);
+                  } else { replacement.textContent = rule.replacementText; }
                   el.parentNode?.insertBefore(replacement, el);
                 }
                 if (!el.hasAttribute("data-kiosk-hidden")) {
@@ -1294,6 +1298,20 @@ internal sealed class MainForm : Form
         """.Replace("__RULES__", json, StringComparison.Ordinal);
         try { await _browser.CoreWebView2.ExecuteScriptAsync(script); }
         catch (Exception ex) { AppDiagnostics.Write("Apply admin element rules", ex); }
+    }
+
+    private static string? TryLoadReplacementImageDataUri(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return null;
+        try
+        {
+            var ext = Path.GetExtension(path).ToLowerInvariant();
+            var mime = ext switch { ".png" => "image/png", ".jpg" or ".jpeg" => "image/jpeg", ".webp" => "image/webp", ".gif" => "image/gif", ".bmp" => "image/bmp", _ => null };
+            if (mime is null || !File.Exists(path)) return null;
+            var info = new FileInfo(path); if (info.Length <= 0 || info.Length > 8 * 1024 * 1024) return null;
+            return $"data:{mime};base64,{Convert.ToBase64String(File.ReadAllBytes(path))}";
+        }
+        catch (Exception ex) { AppDiagnostics.Write("Load replacement image", ex); return null; }
     }
 
     private void EnforceCurrentPage()
