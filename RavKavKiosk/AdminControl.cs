@@ -44,19 +44,70 @@ internal sealed class AdminPolicyExport
 
 internal static class AdminPolicyStore
 {
-    private static readonly string Folder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "RavKavKiosk");
+    private static readonly string Folder = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "DaatAharon", "RavKavKiosk");
     private static readonly string FilePath = Path.Combine(Folder, "admin-policy.json");
+    private static readonly string BackupPath = FilePath + ".bak";
+    private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true, PropertyNameCaseInsensitive = true };
+    public static string StoragePath => FilePath;
+
     public static AdminPolicy Load()
     {
-        try { return File.Exists(FilePath) ? JsonSerializer.Deserialize<AdminPolicy>(File.ReadAllText(FilePath)) ?? new() : new(); }
-        catch { return new(); }
+        Directory.CreateDirectory(Folder);
+        foreach (var candidate in new[] { FilePath, BackupPath })
+        {
+            try
+            {
+                if (!File.Exists(candidate)) continue;
+                var json = File.ReadAllText(candidate, Encoding.UTF8);
+                var loaded = JsonSerializer.Deserialize<AdminPolicy>(json, JsonOptions);
+                if (loaded is not null) return loaded;
+            }
+            catch (Exception ex)
+            {
+                AppDiagnostics.Write("Admin policy load failed",
+                    new InvalidDataException("Unable to load " + Path.GetFileName(candidate), ex));
+            }
+        }
+        return new AdminPolicy();
     }
+
     public static void Save(AdminPolicy policy)
     {
+        ArgumentNullException.ThrowIfNull(policy);
         Directory.CreateDirectory(Folder);
-        var temp = FilePath + ".tmp";
-        File.WriteAllText(temp, JsonSerializer.Serialize(policy, new JsonSerializerOptions { WriteIndented = true }), new UTF8Encoding(false));
-        File.Move(temp, FilePath, true);
+        var json = JsonSerializer.Serialize(policy, JsonOptions);
+        var temp = FilePath + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        try
+        {
+            File.WriteAllText(temp, json, new UTF8Encoding(false));
+            // Verify the serialized file before replacing the last known-good settings.
+            var verified = JsonSerializer.Deserialize<AdminPolicy>(File.ReadAllText(temp, Encoding.UTF8), JsonOptions)
+                ?? throw new InvalidDataException("קובץ ההגדרות שנשמר אינו תקין.");
+            if (File.Exists(FilePath))
+                File.Copy(FilePath, BackupPath, true);
+            File.Move(temp, FilePath, true);
+            var persisted = JsonSerializer.Deserialize<AdminPolicy>(File.ReadAllText(FilePath, Encoding.UTF8), JsonOptions)
+                ?? throw new IOException("אימות קובץ ההגדרות לאחר השמירה נכשל.");
+            if (persisted.Routes.Count != policy.Routes.Count ||
+                persisted.Elements.Count != policy.Elements.Count ||
+                persisted.AllowedHosts.Count != policy.AllowedHosts.Count)
+                throw new IOException("אימות מספר הכללים לאחר השמירה נכשל.");
+            AppDiagnostics.Write("Admin policy saved",
+                details: "Routes=" + persisted.Routes.Count +
+                         "; Elements=" + persisted.Elements.Count +
+                         "; Hosts=" + persisted.AllowedHosts.Count +
+                         "; Path=" + FilePath);
+        }
+        catch (Exception ex)
+        {
+            AppDiagnostics.Write("Admin policy save failed", ex);
+            throw new IOException("שמירת הגדרות הניהול נכשלה. הקובץ: " + FilePath, ex);
+        }
+        finally
+        {
+            try { if (File.Exists(temp)) File.Delete(temp); } catch { }
+        }
     }
     public static void ExportBundle(AdminPolicy policy, string destination)
     {
