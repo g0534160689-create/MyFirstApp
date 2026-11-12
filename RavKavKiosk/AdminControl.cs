@@ -174,6 +174,9 @@ internal sealed class AdminManagerForm : Form
     private readonly TextBox hostInput = new() { Width = 190 };
     private readonly ListBox rules = new() { Dock = DockStyle.Fill, HorizontalScrollbar = true, SelectionMode = SelectionMode.MultiExtended };
     private readonly List<(string Url, string Text, bool Blocked)> scannedLinks = [];
+    private readonly List<ElementPolicyRule> displayedElements = [];
+    private ComboBox? elementFilter;
+    private ComboBox? elementSort;
     private readonly Label selected = new() { AutoSize = false, Height = 38, Dock = DockStyle.Top, TextAlign = ContentAlignment.MiddleRight };
     private readonly string currentUrl;
     private string selectedElementHost = "";
@@ -289,7 +292,23 @@ internal sealed class AdminManagerForm : Form
         host.Controls.Add(hostInput);
         var addHost = new Button { Text = "הוסף לאתרים המורשים", Width = 170 }; addHost.Click += (_, _) => AddHost();
         host.Controls.Add(addHost); root.Controls.Add(host, 0, 3);
-        root.Controls.Add(rules, 0, 4); root.Controls.Add(selected, 0, 5);
+        root.Controls.Add(rules, 0, 4);
+        var selectionBar = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft, WrapContents = false };
+        selected.Width = 300;
+        selectionBar.Controls.Add(selected);
+        elementFilter = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 130, Height = 30 };
+        elementFilter.Items.AddRange(new object[] { "כל הרכיבים", "מוסתרים", "מוסתרים עם תמונה", "מוסתרים עם טקסט", "מוצגים" });
+        elementFilter.SelectedIndex = 0;
+        elementFilter.SelectedIndexChanged += (_, _) => RefreshRules();
+        elementSort = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 140, Height = 30 };
+        elementSort.Items.AddRange(new object[] { "סדר רגיל", "מוסתרים תחילה", "תמונות תחילה", "לפי אתר" });
+        elementSort.SelectedIndex = 1;
+        elementSort.SelectedIndexChanged += (_, _) => RefreshRules();
+        selectionBar.Controls.Add(new Label { Text = "סינון:", AutoSize = true, Padding = new Padding(4, 8, 0, 0) });
+        selectionBar.Controls.Add(elementFilter);
+        selectionBar.Controls.Add(new Label { Text = "מיון:", AutoSize = true, Padding = new Padding(4, 8, 0, 0) });
+        selectionBar.Controls.Add(elementSort);
+        root.Controls.Add(selectionBar, 0, 5);
         var replacementRow = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft, WrapContents = true, AutoScroll = true };
         replacementRow.Controls.Add(new Label { Text = "טקסט חלופי:", AutoSize = true, Padding = new Padding(0, 8, 0, 0) });
         var replacementInput = new TextBox { Width = 245, Height = 48, Multiline = true, ScrollBars = ScrollBars.Vertical, MaxLength = 1000 };
@@ -310,7 +329,13 @@ internal sealed class AdminManagerForm : Form
         var allowElement = new Button { Text = "הצג רכיב שנבחר", Width = 140 }; allowElement.Click += (_, _) => SaveSelectedElement(true);
         var remove = new Button { Text = "מחק כלל מסומן", Width = 120 }; remove.Click += (_, _) => RemoveSelected();
         var change = new Button { Text = "שינוי סיסמה", Width = 110 }; change.Click += (_, _) => AdminAuthentication.ChangePassword(this);
-        actions.Controls.AddRange([pick, blockElement, allowElement, remove, change]); root.Controls.Add(actions, 0, 7);
+        var resetBlacklist = new Button { Text = "אפס רשימה שחורה", Width = 135 };
+        resetBlacklist.Click += (_, _) => ResetBlacklist();
+        var resetElements = new Button { Text = "אפס כללי רכיבים", Width = 125 };
+        resetElements.Click += (_, _) => ResetElementRules();
+        var resetAll = new Button { Text = "אפס כללי מנהל", Width = 120 };
+        resetAll.Click += (_, _) => ResetAllCustomRules();
+        actions.Controls.AddRange([pick, blockElement, allowElement, remove, resetBlacklist, resetElements, resetAll, change]); root.Controls.Add(actions, 0, 7);
     }
     private void ApplyPremiumStyle(Control parent)
     {
@@ -374,9 +399,34 @@ internal sealed class AdminManagerForm : Form
         }
     }
 
+    private void ResetBlacklist()
+    {
+        if (MessageBox.Show(this, "לאפס את כל החסימות הידניות? כל הנתיבים שאושרו יישארו ללא שינוי.", "איפוס רשימה שחורה", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
+        policy.Routes.RemoveAll(r => !r.Allowed);
+        AdminPolicyStore.Save(policy); RefreshRules(); RulesChanged?.Invoke();
+        selected.Text = "הרשימה השחורה הידנית אופסה.";
+    }
+
+    private void ResetElementRules()
+    {
+        if (policy.Elements.Count == 0) return;
+        if (MessageBox.Show(this, $"למחוק את כל {policy.Elements.Count} כללי הרכיבים ולהציג מחדש את הרכיבים שהוסתרו?", "איפוס כללי רכיבים", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
+        policy.Elements.Clear();
+        AdminPolicyStore.Save(policy); RefreshRules(); RulesChanged?.Invoke();
+        selected.Text = "כל כללי הרכיבים אופסו.";
+    }
+
+    private void ResetAllCustomRules()
+    {
+        if (MessageBox.Show(this, "לאפס את כל כללי הנתיבים, הרכיבים והדומיינים הידניים? הגדרות תצוגה, סיסמה והחסימות המובנות לא ישתנו.", "איפוס כללי מנהל", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
+        policy.Routes.Clear(); policy.Elements.Clear(); policy.AllowedHosts.Clear();
+        AdminPolicyStore.Save(policy); RefreshRules(); RulesChanged?.Invoke();
+        selected.Text = "כל הכללים הידניים אופסו.";
+    }
+
     private void AddRoute(bool allowed)
     {
-        var offset = policy.Routes.Count + policy.Elements.Count + policy.AllowedHosts.Count + 7 + AppSettings.Load().BlockedPaths.Count;
+        var offset = policy.Routes.Count + displayedElements.Count + policy.AllowedHosts.Count + 7 + AppSettings.Load().BlockedPaths.Count;
         var selectedLinks = rules.SelectedIndices.Cast<int>()
             .Select(index => index - offset)
             .Where(index => index >= 0 && index < scannedLinks.Count)
@@ -441,30 +491,54 @@ internal sealed class AdminManagerForm : Form
     private void RemoveSelected()
     {
         var index = rules.SelectedIndex; if (index < 0) return;
-        var all = policy.Routes.Select(r => (object)r).Concat(policy.Elements.Select(e => (object)e)).ToList();
-        if (index < all.Count)
+        if (index < policy.Routes.Count)
         {
-            if (all[index] is RoutePolicyRule route) policy.Routes.Remove(route);
-            if (all[index] is ElementPolicyRule element) policy.Elements.Remove(element);
-        }
-        else if (index < all.Count + policy.AllowedHosts.Count)
-        {
-            var hostIndex = index - all.Count;
-            if (hostIndex < 0 || hostIndex >= policy.AllowedHosts.Count) return;
-            policy.AllowedHosts.RemoveAt(hostIndex);
+            policy.Routes.RemoveAt(index);
         }
         else
         {
-            MessageBox.Show(this, "השורה שנבחרה היא מידע על קישור או חסימה מובנית. כדי לשנות אותה, בחר קישור ולחץ על אפשר נתיב או חסום נתיב.");
-            return;
+            var elementIndex = index - policy.Routes.Count;
+            if (elementIndex >= 0 && elementIndex < displayedElements.Count)
+                policy.Elements.Remove(displayedElements[elementIndex]);
+            else
+            {
+                var hostOffset = policy.Routes.Count + displayedElements.Count;
+                if (index >= hostOffset && index < hostOffset + policy.AllowedHosts.Count)
+                    policy.AllowedHosts.RemoveAt(index - hostOffset);
+                else
+                {
+                    MessageBox.Show(this, "השורה שנבחרה היא מידע מובנה או קישור שנסרק. בחר כלל מותאם כדי למחוק אותו.");
+                    return;
+                }
+            }
         }
         AdminPolicyStore.Save(policy); RefreshRules(); RulesChanged?.Invoke();
     }
+
     private void RefreshRules()
     {
         rules.Items.Clear();
         foreach (var r in policy.Routes) rules.Items.Add($"{(r.Allowed ? "מאושר" : "חסום")} | {r.Host}{r.Path}");
-        foreach (var e in policy.Elements) rules.Items.Add($"{(e.Allowed ? "מוצג" : !string.IsNullOrWhiteSpace(e.ReplacementImagePath) ? "מוסתר + תמונה" : e.ReplacementText.Length > 0 ? "מוסתר + חלופי" : "מוסתר")} | {e.Host} | {e.Selector}");
+        IEnumerable<ElementPolicyRule> elements = policy.Elements;
+        var filter = elementFilter?.SelectedIndex ?? 0;
+        elements = filter switch
+        {
+            1 => elements.Where(e => !e.Allowed),
+            2 => elements.Where(e => !e.Allowed && !string.IsNullOrWhiteSpace(e.ReplacementImagePath)),
+            3 => elements.Where(e => !e.Allowed && !string.IsNullOrWhiteSpace(e.ReplacementText)),
+            4 => elements.Where(e => e.Allowed),
+            _ => elements
+        };
+        elements = (elementSort?.SelectedIndex ?? 1) switch
+        {
+            1 => elements.OrderBy(e => e.Allowed).ThenBy(e => e.Host, StringComparer.OrdinalIgnoreCase),
+            2 => elements.OrderByDescending(e => !string.IsNullOrWhiteSpace(e.ReplacementImagePath)).ThenBy(e => e.Host, StringComparer.OrdinalIgnoreCase),
+            3 => elements.OrderBy(e => e.Host, StringComparer.OrdinalIgnoreCase).ThenBy(e => e.Selector, StringComparer.OrdinalIgnoreCase),
+            _ => elements
+        };
+        displayedElements.Clear(); displayedElements.AddRange(elements);
+        foreach (var e in displayedElements)
+            rules.Items.Add($"{(e.Allowed ? "מוצג" : !string.IsNullOrWhiteSpace(e.ReplacementImagePath) ? "מוסתר + תמונה" : e.ReplacementText.Length > 0 ? "מוסתר + חלופי" : "מוסתר")} | {e.Host} | {e.Selector}");
         foreach (var h in policy.AllowedHosts) rules.Items.Add($"דומיין מורשה | {h}");
         foreach (var h in new[] { "hopon.co.il", "ravkavonline.co.il", "donors.matara.pro", "www.matara.pro", "matara.pro", "rishumon.net", "tora.irom.co.il" })
             rules.Items.Add($"דומיין מורשה מובנה | {h}");
@@ -493,9 +567,9 @@ internal sealed class AdminManagerForm : Form
             return;
         }
         var elementIndex = index - policy.Routes.Count;
-        if (elementIndex >= 0 && elementIndex < policy.Elements.Count)
+        if (elementIndex >= 0 && elementIndex < displayedElements.Count)
         {
-            var element = policy.Elements[elementIndex];
+            var element = displayedElements[elementIndex];
             selectedElementHost = element.Host;
             selected.Text = $"רכיב שנבחר (כלל קיים) | {element.Host}: {element.Selector}";
             return;
