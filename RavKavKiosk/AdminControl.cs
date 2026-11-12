@@ -31,6 +31,7 @@ internal sealed class ElementPolicyRule
     public bool Allowed { get; set; }
     public string ReplacementText { get; set; } = "";
     public string ReplacementImagePath { get; set; } = "";
+    public string ReplacementImageFit { get; set; } = "contain";
 }
 
 internal static class AdminPolicyStore
@@ -179,6 +180,8 @@ internal sealed class AdminManagerForm : Form
     private ComboBox? elementSort;
     private TextBox? replacementInput;
     private TextBox? imagePathInput;
+    private ComboBox? imageFitInput;
+    private PictureBox? replacementPreview;
     private readonly Label selected = new() { AutoSize = false, Height = 38, Dock = DockStyle.Top, TextAlign = ContentAlignment.MiddleRight };
     private readonly string currentUrl;
     private string selectedElementHost = "";
@@ -189,6 +192,7 @@ internal sealed class AdminManagerForm : Form
     public event Action<bool>? RavKavPanelVisibilityChanged;
     public event Action<bool>? HopOnPanelVisibilityChanged;
     public event Action<string>? ThemeChanged;
+    public event Action? ReaderDiagnosticsRequested;
     private bool adminMode;
     private Button? adminModeButton;
     public AdminManagerForm(string url)
@@ -211,7 +215,7 @@ internal sealed class AdminManagerForm : Form
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 110));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 132));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
         Controls.Add(root);
         root.Controls.Add(new Label { Text = "ניהול הרשאות — כתובות, נתיבים ורכיבים בעמוד", Dock = DockStyle.Fill, Font = new Font("Segoe UI", 13, FontStyle.Bold), TextAlign = ContentAlignment.MiddleRight }, 0, 0);
@@ -315,10 +319,32 @@ internal sealed class AdminManagerForm : Form
         replacementRow.Controls.Add(new Label { Text = "טקסט חלופי:", AutoSize = true, Padding = new Padding(0, 8, 0, 0) });
         replacementInput = new TextBox { Width = 245, Height = 48, Multiline = true, ScrollBars = ScrollBars.Vertical, MaxLength = 1000 };
         replacementInput.PlaceholderText = "טקסט להצגה במקום הרכיב"; replacementRow.Controls.Add(replacementInput);
-        imagePathInput = new TextBox { Width = 270, Height = 28, ReadOnly = true, PlaceholderText = "בחר תמונה מהמחשב..." };
+        imagePathInput = new TextBox { Width = 220, Height = 28, ReadOnly = true, PlaceholderText = "בחר תמונה מהמחשב..." };
+        imageFitInput = new ComboBox { Width = 105, DropDownStyle = ComboBoxStyle.DropDownList };
+        imageFitInput.Items.AddRange(new object[] { "התאם בשלמות", "מלא את האזור" });
+        imageFitInput.SelectedIndex = 0;
+        replacementPreview = new PictureBox { Width = 76, Height = 76, SizeMode = PictureBoxSizeMode.Zoom, BackColor = Color.FromArgb(17, 30, 48), BorderStyle = BorderStyle.FixedSingle };
         var browseImage = new Button { Text = "בחר תמונה", Width = 100, Height = 30 };
-        browseImage.Click += (_, _) => { using var dialog = new OpenFileDialog { Title = "בחירת תמונה חלופית", Filter = "קובצי תמונה|*.png;*.jpg;*.jpeg;*.webp;*.gif;*.bmp", CheckFileExists = true }; if (dialog.ShowDialog(this) == DialogResult.OK) imagePathInput.Text = dialog.FileName; };
+        browseImage.Click += (_, _) =>
+        {
+            using var dialog = new OpenFileDialog { Title = "בחירת תמונה חלופית", Filter = "קובצי תמונה|*.png;*.jpg;*.jpeg;*.webp;*.gif;*.bmp", CheckFileExists = true };
+            if (dialog.ShowDialog(this) == DialogResult.OK)
+            {
+                try
+                {
+                    using var source = Image.FromFile(dialog.FileName);
+                    var thumbnail = source.GetThumbnailImage(240, 240, () => false, IntPtr.Zero);
+                    var oldPreview = replacementPreview?.Image;
+                    if (replacementPreview is not null) replacementPreview.Image = thumbnail;
+                    oldPreview?.Dispose();
+                    imagePathInput.Text = dialog.FileName;
+                }
+                catch (Exception ex) { MessageBox.Show(this, "לא ניתן לטעון תצוגה מקדימה: " + ex.Message); }
+            }
+        };
         replacementRow.Controls.Add(imagePathInput); replacementRow.Controls.Add(browseImage);
+        replacementRow.Controls.Add(new Label { Text = "התאמת תמונה:", AutoSize = true, Padding = new Padding(4, 8, 0, 0) });
+        replacementRow.Controls.Add(imageFitInput); replacementRow.Controls.Add(replacementPreview);
         var replaceElement = new Button { Text = "הסתר + טקסט", Width = 115, Height = 34 };
         replaceElement.Click += (_, _) => SaveSelectedElement(false, replacementInput.Text.Trim()); replacementRow.Controls.Add(replaceElement);
         var replaceWithImage = new Button { Text = "הסתר + תמונה", Width = 120, Height = 34 };
@@ -331,13 +357,15 @@ internal sealed class AdminManagerForm : Form
         var allowElement = new Button { Text = "הצג רכיב שנבחר", Width = 140 }; allowElement.Click += (_, _) => SaveSelectedElement(true);
         var remove = new Button { Text = "מחק כלל מסומן", Width = 120 }; remove.Click += (_, _) => RemoveSelected();
         var change = new Button { Text = "שינוי סיסמה", Width = 110 }; change.Click += (_, _) => AdminAuthentication.ChangePassword(this);
+        var readerDiagnostics = new Button { Text = "אבחון קורא כרטיסים", Width = 150 };
+        readerDiagnostics.Click += (_, _) => ReaderDiagnosticsRequested?.Invoke();
         var resetBlacklist = new Button { Text = "אפס רשימה שחורה", Width = 135 };
         resetBlacklist.Click += (_, _) => ResetBlacklist();
         var resetElements = new Button { Text = "אפס כללי רכיבים", Width = 125 };
         resetElements.Click += (_, _) => ResetElementRules();
         var resetAll = new Button { Text = "אפס כללי מנהל", Width = 120 };
         resetAll.Click += (_, _) => ResetAllCustomRules();
-        actions.Controls.AddRange([pick, blockElement, allowElement, remove, resetBlacklist, resetElements, resetAll, change]); root.Controls.Add(actions, 0, 7);
+        actions.Controls.AddRange([pick, blockElement, allowElement, remove, resetBlacklist, resetElements, resetAll, readerDiagnostics, change]); root.Controls.Add(actions, 0, 7);
     }
     private void ApplyPremiumStyle(Control parent)
     {
@@ -485,7 +513,12 @@ internal sealed class AdminManagerForm : Form
         var imagePath = allowed ? "" : replacementImagePath.Trim();
         if (imagePath.Length > 0 && (!File.Exists(imagePath) || Path.GetExtension(imagePath).ToLowerInvariant() is not (".png" or ".jpg" or ".jpeg" or ".webp" or ".gif" or ".bmp"))) { MessageBox.Show(this, "בחר קובץ תמונה תקין מסוג PNG, JPG, WEBP, GIF או BMP."); return; }
         if (imagePath.Length > 0 && new FileInfo(imagePath).Length > 8 * 1024 * 1024) { MessageBox.Show(this, "גודל התמונה מוגבל ל־8MB."); return; }
-        var rule = new ElementPolicyRule(host, selector, allowed) { ReplacementText = allowed ? "" : replacementText.Trim(), ReplacementImagePath = imagePath };
+        var rule = new ElementPolicyRule(host, selector, allowed)
+        {
+            ReplacementText = allowed ? "" : replacementText.Trim(),
+            ReplacementImagePath = imagePath,
+            ReplacementImageFit = imageFitInput?.SelectedIndex == 1 ? "cover" : "contain"
+        };
         policy.Elements.Add(rule);
         AdminPolicyStore.Save(policy); RefreshRules(); RulesChanged?.Invoke();
         selected.Text = allowed ? "הרכיב יוצג מחדש." :
@@ -578,6 +611,18 @@ internal sealed class AdminManagerForm : Form
             selected.Text = $"רכיב שנבחר (כלל קיים) | {element.Host}: {element.Selector}";
             if (replacementInput is not null) replacementInput.Text = element.ReplacementText ?? "";
             if (imagePathInput is not null) imagePathInput.Text = element.ReplacementImagePath ?? "";
+            if (imageFitInput is not null) imageFitInput.SelectedIndex = element.ReplacementImageFit == "cover" ? 1 : 0;
+            if (replacementPreview is not null)
+            {
+                var oldPreview = replacementPreview.Image;
+                replacementPreview.Image = null;
+                oldPreview?.Dispose();
+                if (!string.IsNullOrWhiteSpace(element.ReplacementImagePath) && File.Exists(element.ReplacementImagePath))
+                {
+                    try { using var source = Image.FromFile(element.ReplacementImagePath); replacementPreview.Image = source.GetThumbnailImage(240, 240, () => false, IntPtr.Zero); }
+                    catch { }
+                }
+            }
             return;
         }
         var offset = policy.Routes.Count + displayedElements.Count + policy.AllowedHosts.Count + 7 + AppSettings.Load().BlockedPaths.Count;
