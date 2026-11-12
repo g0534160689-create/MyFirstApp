@@ -1236,8 +1236,13 @@ internal sealed class MainForm : Form
           // Remove the previous pass cleanly when an administrator edits the rules.
           document.querySelectorAll("[data-kiosk-replacement]").forEach(node => node.remove());
           document.querySelectorAll("[data-kiosk-hidden]").forEach(node => {
-            node.style.removeProperty("display");
+            const oldDisplay = node.getAttribute("data-kiosk-old-display") || "";
+            const oldPriority = node.getAttribute("data-kiosk-old-display-priority") || "";
+            if (oldDisplay) node.style.setProperty("display", oldDisplay, oldPriority);
+            else node.style.removeProperty("display");
             node.removeAttribute("data-kiosk-hidden");
+            node.removeAttribute("data-kiosk-old-display");
+            node.removeAttribute("data-kiosk-old-display-priority");
           });
           const apply = () => {
             for (const rule of rules) {
@@ -1266,6 +1271,10 @@ internal sealed class MainForm : Form
                   replacement.style.borderRadius = computed.borderRadius;
                   replacement.style.overflow = "hidden";
                   el.parentNode?.insertBefore(replacement, el);
+                }
+                if (!el.hasAttribute("data-kiosk-hidden")) {
+                  el.setAttribute("data-kiosk-old-display", el.style.getPropertyValue("display"));
+                  el.setAttribute("data-kiosk-old-display-priority", el.style.getPropertyPriority("display"));
                 }
                 el.style.setProperty("display", "none", "important");
                 el.setAttribute("data-kiosk-hidden", "true");
