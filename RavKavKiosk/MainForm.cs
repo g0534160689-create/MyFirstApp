@@ -1177,11 +1177,11 @@ internal sealed class MainForm : Form
                 {
                     foreach (var item in reportItems.EnumerateArray())
                     {
-                        var selector = item.TryGetProperty("selector", out var selectorValue) ? selectorValue.GetString() ?? "" : "";
-                        var tag = item.TryGetProperty("tag", out var tagValue) ? tagValue.GetString() ?? "element" : "element";
-                        var label = item.TryGetProperty("text", out var textValue) ? textValue.GetString() ?? "" : "";
-                        var count = item.TryGetProperty("count", out var countValue) && countValue.TryGetInt32(out var parsedCount) ? parsedCount : 1;
-                        items.Add((selector, tag, label, count));
+                        var reportSelector = item.TryGetProperty("selector", out var selectorValue) ? selectorValue.GetString() ?? "" : "";
+                        var reportTag = item.TryGetProperty("tag", out var reportTagValue) ? reportTagValue.GetString() ?? "element" : "element";
+                        var reportText = item.TryGetProperty("text", out var reportTextValue) ? reportTextValue.GetString() ?? "" : "";
+                        var reportCount = item.TryGetProperty("count", out var reportCountValue) && reportCountValue.TryGetInt32(out var parsedCount) ? parsedCount : 1;
+                        items.Add((reportSelector, reportTag, reportText, reportCount));
                     }
                 }
                 _adminManager?.ReceiveBlockedElementReport(items);
