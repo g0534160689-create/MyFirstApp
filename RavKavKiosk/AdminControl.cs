@@ -30,6 +30,7 @@ internal sealed class ElementPolicyRule
     public string Selector { get; set; } = "";
     public bool Allowed { get; set; }
     public string ReplacementText { get; set; } = "";
+    public string ReplacementImagePath { get; set; } = "";
 }
 
 internal static class AdminPolicyStore
@@ -200,7 +201,7 @@ internal sealed class AdminManagerForm : Form
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 74));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 110));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
         Controls.Add(root);
         root.Controls.Add(new Label { Text = "ניהול הרשאות — כתובות, נתיבים ורכיבים בעמוד", Dock = DockStyle.Fill, Font = new Font("Segoe UI", 13, FontStyle.Bold), TextAlign = ContentAlignment.MiddleRight }, 0, 0);
@@ -284,14 +285,18 @@ internal sealed class AdminManagerForm : Form
         var addHost = new Button { Text = "הוסף לאתרים המורשים", Width = 170 }; addHost.Click += (_, _) => AddHost();
         host.Controls.Add(addHost); root.Controls.Add(host, 0, 3);
         root.Controls.Add(rules, 0, 4); root.Controls.Add(selected, 0, 5);
-        var replacementRow = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft, WrapContents = false, AutoScroll = true };
-        replacementRow.Controls.Add(new Label { Text = "טקסט חלופי במקום הרכיב (אופציונלי):", AutoSize = true, Padding = new Padding(0, 8, 0, 0) });
-        var replacementInput = new TextBox { Width = 390, Height = 52, Multiline = true, ScrollBars = ScrollBars.Vertical, MaxLength = 1000 };
-        replacementInput.PlaceholderText = "השאר ריק להסתרה בלבד; כתוב כאן טקסט להצגה באותו מקום";
-        replacementRow.Controls.Add(replacementInput);
-        var replaceElement = new Button { Text = "הסתר והצג במקום", Width = 145, Height = 48 };
-        replaceElement.Click += (_, _) => SaveSelectedElement(false, replacementInput.Text.Trim());
-        replacementRow.Controls.Add(replaceElement);
+        var replacementRow = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft, WrapContents = true, AutoScroll = true };
+        replacementRow.Controls.Add(new Label { Text = "טקסט חלופי:", AutoSize = true, Padding = new Padding(0, 8, 0, 0) });
+        var replacementInput = new TextBox { Width = 245, Height = 48, Multiline = true, ScrollBars = ScrollBars.Vertical, MaxLength = 1000 };
+        replacementInput.PlaceholderText = "טקסט להצגה במקום הרכיב"; replacementRow.Controls.Add(replacementInput);
+        var imagePathInput = new TextBox { Width = 270, Height = 28, ReadOnly = true, PlaceholderText = "בחר תמונה מהמחשב..." };
+        var browseImage = new Button { Text = "בחר תמונה", Width = 100, Height = 30 };
+        browseImage.Click += (_, _) => { using var dialog = new OpenFileDialog { Title = "בחירת תמונה חלופית", Filter = "קובצי תמונה|*.png;*.jpg;*.jpeg;*.webp;*.gif;*.bmp", CheckFileExists = true }; if (dialog.ShowDialog(this) == DialogResult.OK) imagePathInput.Text = dialog.FileName; };
+        replacementRow.Controls.Add(imagePathInput); replacementRow.Controls.Add(browseImage);
+        var replaceElement = new Button { Text = "הסתר + טקסט", Width = 115, Height = 34 };
+        replaceElement.Click += (_, _) => SaveSelectedElement(false, replacementInput.Text.Trim()); replacementRow.Controls.Add(replaceElement);
+        var replaceWithImage = new Button { Text = "הסתר + תמונה", Width = 120, Height = 34 };
+        replaceWithImage.Click += (_, _) => SaveSelectedElement(false, replacementInput.Text.Trim(), imagePathInput.Text.Trim()); replacementRow.Controls.Add(replaceWithImage);
         root.Controls.Add(replacementRow, 0, 6);
 
         var actions = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft };
@@ -348,7 +353,7 @@ internal sealed class AdminManagerForm : Form
         selected.Text = $"נסרקו {scannedLinks.Count} קישורים בעמוד. בחר קישור מהרשימה כדי לטעון אותו לשדה הנתיב, ואז לחץ אפשר או חסום.";
         Show(); Activate();
     }
-    private void SaveSelectedElement(bool allowed, string replacementText = "")
+    private void SaveSelectedElement(bool allowed, string replacementText = "", string replacementImagePath = "")
     {
         var marker = ": ";
         var split = selected.Text.LastIndexOf(marker, StringComparison.Ordinal);
@@ -356,10 +361,14 @@ internal sealed class AdminManagerForm : Form
         var host = selectedElementHost;
         if (selector.Length == 0 || string.IsNullOrWhiteSpace(host)) { MessageBox.Show(this, "בחר תחילה רכיב מתוך האתר באמצעות לחיצה שמאלית או בחר כלל רכיב מהרשימה."); return; }
         policy.Elements.RemoveAll(r => r.Host.Equals(host, StringComparison.OrdinalIgnoreCase) && r.Selector == selector);
-        var rule = new ElementPolicyRule(host, selector, allowed) { ReplacementText = allowed ? "" : replacementText.Trim() };
+        var imagePath = allowed ? "" : replacementImagePath.Trim();
+        if (imagePath.Length > 0 && (!File.Exists(imagePath) || Path.GetExtension(imagePath).ToLowerInvariant() is not (".png" or ".jpg" or ".jpeg" or ".webp" or ".gif" or ".bmp"))) { MessageBox.Show(this, "בחר קובץ תמונה תקין מסוג PNG, JPG, WEBP, GIF או BMP."); return; }
+        if (imagePath.Length > 0 && new FileInfo(imagePath).Length > 8 * 1024 * 1024) { MessageBox.Show(this, "גודל התמונה מוגבל ל־8MB."); return; }
+        var rule = new ElementPolicyRule(host, selector, allowed) { ReplacementText = allowed ? "" : replacementText.Trim(), ReplacementImagePath = imagePath };
         policy.Elements.Add(rule);
         AdminPolicyStore.Save(policy); RefreshRules(); RulesChanged?.Invoke();
         selected.Text = allowed ? "הרכיב יוצג מחדש." :
+            rule.ReplacementImagePath.Length > 0 ? "הרכיב הוסתר ותמונה חלופית תוצג במקומו." :
             rule.ReplacementText.Length > 0 ? "הרכיב הוסתר ותוכן חלופי יוצג במקומו." : "הרכיב הוסתר.";
     }
     private void RemoveSelected()
@@ -388,7 +397,7 @@ internal sealed class AdminManagerForm : Form
     {
         rules.Items.Clear();
         foreach (var r in policy.Routes) rules.Items.Add($"{(r.Allowed ? "מאושר" : "חסום")} | {r.Host}{r.Path}");
-        foreach (var e in policy.Elements) rules.Items.Add($"{(e.Allowed ? "מוצג" : e.ReplacementText.Length > 0 ? "מוסתר + חלופי" : "מוסתר")} | {e.Host} | {e.Selector}");
+        foreach (var e in policy.Elements) rules.Items.Add($"{(e.Allowed ? "מוצג" : !string.IsNullOrWhiteSpace(e.ReplacementImagePath) ? "מוסתר + תמונה" : e.ReplacementText.Length > 0 ? "מוסתר + חלופי" : "מוסתר")} | {e.Host} | {e.Selector}");
         foreach (var h in policy.AllowedHosts) rules.Items.Add($"דומיין מורשה | {h}");
         foreach (var h in new[] { "hopon.co.il", "ravkavonline.co.il", "donors.matara.pro", "www.matara.pro", "matara.pro", "rishumon.net", "tora.irom.co.il" })
             rules.Items.Add($"דומיין מורשה מובנה | {h}");
