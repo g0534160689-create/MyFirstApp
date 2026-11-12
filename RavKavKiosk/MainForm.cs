@@ -1596,9 +1596,12 @@ internal sealed class MainForm : Form
             return;
         }
 
-        if (!Uri.TryCreate(e.Uri, UriKind.Absolute, out target) ||
-            !IsAllowedNavigationUri(target) || IsBlockedNavigationUri(target) ||
-            !target.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
+        var isBlankBootstrap = Uri.TryCreate(e.Uri, UriKind.Absolute, out target) &&
+            target.Equals(new Uri("about:blank")) && e.IsUserInitiated;
+        if (!isBlankBootstrap &&
+            (!Uri.TryCreate(e.Uri, UriKind.Absolute, out target) ||
+             !IsAllowedNavigationUri(target) || IsBlockedNavigationUri(target) ||
+             !target.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)))
         {
             e.Handled = true;
             _status.Text = "חלון קופץ נחסם: הכתובת אינה מאובטחת או אינה מאושרת.";
@@ -1619,7 +1622,10 @@ internal sealed class MainForm : Form
 
             popup.Core.NavigationStarting += (_, navigation) =>
             {
-                if (!Uri.TryCreate(navigation.Uri, UriKind.Absolute, out var next) ||
+                if (Uri.TryCreate(navigation.Uri, UriKind.Absolute, out var next) &&
+                    next.Equals(new Uri("about:blank")))
+                    return;
+                if (!Uri.TryCreate(navigation.Uri, UriKind.Absolute, out next) ||
                     !IsAllowedNavigationUri(next) || IsBlockedNavigationUri(next) ||
                     !next.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
                 {
