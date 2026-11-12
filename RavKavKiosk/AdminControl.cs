@@ -177,6 +177,8 @@ internal sealed class AdminManagerForm : Form
     private readonly List<ElementPolicyRule> displayedElements = [];
     private ComboBox? elementFilter;
     private ComboBox? elementSort;
+    private TextBox? replacementInput;
+    private TextBox? imagePathInput;
     private readonly Label selected = new() { AutoSize = false, Height = 38, Dock = DockStyle.Top, TextAlign = ContentAlignment.MiddleRight };
     private readonly string currentUrl;
     private string selectedElementHost = "";
@@ -311,9 +313,9 @@ internal sealed class AdminManagerForm : Form
         root.Controls.Add(selectionBar, 0, 5);
         var replacementRow = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft, WrapContents = true, AutoScroll = true };
         replacementRow.Controls.Add(new Label { Text = "טקסט חלופי:", AutoSize = true, Padding = new Padding(0, 8, 0, 0) });
-        var replacementInput = new TextBox { Width = 245, Height = 48, Multiline = true, ScrollBars = ScrollBars.Vertical, MaxLength = 1000 };
+        replacementInput = new TextBox { Width = 245, Height = 48, Multiline = true, ScrollBars = ScrollBars.Vertical, MaxLength = 1000 };
         replacementInput.PlaceholderText = "טקסט להצגה במקום הרכיב"; replacementRow.Controls.Add(replacementInput);
-        var imagePathInput = new TextBox { Width = 270, Height = 28, ReadOnly = true, PlaceholderText = "בחר תמונה מהמחשב..." };
+        imagePathInput = new TextBox { Width = 270, Height = 28, ReadOnly = true, PlaceholderText = "בחר תמונה מהמחשב..." };
         var browseImage = new Button { Text = "בחר תמונה", Width = 100, Height = 30 };
         browseImage.Click += (_, _) => { using var dialog = new OpenFileDialog { Title = "בחירת תמונה חלופית", Filter = "קובצי תמונה|*.png;*.jpg;*.jpeg;*.webp;*.gif;*.bmp", CheckFileExists = true }; if (dialog.ShowDialog(this) == DialogResult.OK) imagePathInput.Text = dialog.FileName; };
         replacementRow.Controls.Add(imagePathInput); replacementRow.Controls.Add(browseImage);
@@ -460,6 +462,8 @@ internal sealed class AdminManagerForm : Form
         var details = string.IsNullOrWhiteSpace(href) ? "" : " | קישור: " + href;
         var caption = string.IsNullOrWhiteSpace(label) ? "" : " | " + label;
         selected.Text = $"רכיב שנבחר ({tag}){caption}{details}: {selector}";
+        if (replacementInput is not null) replacementInput.Clear();
+        if (imagePathInput is not null) imagePathInput.Clear();
         Show(); Activate();
     }
     public void ReceiveScannedLinks(IEnumerable<(string Url, string Text, bool Blocked)> links)
@@ -572,6 +576,8 @@ internal sealed class AdminManagerForm : Form
             var element = displayedElements[elementIndex];
             selectedElementHost = element.Host;
             selected.Text = $"רכיב שנבחר (כלל קיים) | {element.Host}: {element.Selector}";
+            if (replacementInput is not null) replacementInput.Text = element.ReplacementText ?? "";
+            if (imagePathInput is not null) imagePathInput.Text = element.ReplacementImagePath ?? "";
             return;
         }
         var offset = policy.Routes.Count + displayedElements.Count + policy.AllowedHosts.Count + 7 + AppSettings.Load().BlockedPaths.Count;
