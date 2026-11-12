@@ -1301,6 +1301,9 @@ internal sealed class MainForm : Form
         var script = """
         (() => {
           const rules = __RULES__;
+          // Keep the latest rules and apply callback on window. A MutationObserver
+          // must never retain a closure over an older rule set after an admin edit.
+          window.__kioskElementRules = rules;
           const marker = "data-kiosk-replacement-for";
           // Remove the previous pass cleanly when an administrator edits the rules.
           document.querySelectorAll("[data-kiosk-replacement]").forEach(node => node.remove());
@@ -1348,26 +1351,40 @@ internal sealed class MainForm : Form
                 if (!el.hasAttribute("data-kiosk-hidden")) {
                   el.setAttribute("data-kiosk-old-display", el.style.getPropertyValue("display"));
                   el.setAttribute("data-kiosk-old-display-priority", el.style.getPropertyPriority("display"));
+                  el.setAttribute("data-kiosk-hidden", "true");
                 }
-                el.style.setProperty("display", "none", "important");
-                el.setAttribute("data-kiosk-hidden", "true");
+                // Avoid writing the same inline style repeatedly: the observer also
+                // watches style changes so it can re-hide elements modified by the site.
+                if (el.style.getPropertyValue("display") !== "none" ||
+                    el.style.getPropertyPriority("display") !== "important")
+                  el.style.setProperty("display", "none", "important");
               }
             }
           };
+          window.__kioskApplyElementRules = apply;
           apply();
-          if (!window.__kioskElementObserver) {
-            window.__kioskElementObserver = new MutationObserver(() => {
-              if (window.__kioskElementApplying) return;
-              window.__kioskElementApplying = true;
-              try { apply(); } finally { window.__kioskElementApplying = false; }
-            });
-            window.__kioskElementObserver.observe(document.documentElement, { childList: true, subtree: true });
-          }
+
+          // Recreate the observer whenever rules are refreshed. Its callback always
+          // reads the latest window callback, never a stale closure from an old script.
+          if (window.__kioskElementObserver) window.__kioskElementObserver.disconnect();
+          window.__kioskElementObserver = new MutationObserver(() => {
+            if (window.__kioskElementApplying) return;
+            window.__kioskElementApplying = true;
+            try { window.__kioskApplyElementRules?.(); }
+            finally { window.__kioskElementApplying = false; }
+          });
+          window.__kioskElementObserver.observe(document.documentElement, {
+            childList: true,
+            subtree: true,
+            attributes: true,
+            attributeFilter: ["class", "style", "hidden", "aria-hidden"]
+          });
+
           // Report real DOM matches on demand; keep this separate from the observer
           // to avoid flooding the host while modern pages continuously update.
           window.__kioskReportBlockedElements = () => {
             const found = new Map();
-            for (const rule of rules) {
+            for (const rule of (window.__kioskElementRules || [])) {
               let nodes;
               try { nodes = document.querySelectorAll(rule.selector); } catch { continue; }
               let count = 0;
