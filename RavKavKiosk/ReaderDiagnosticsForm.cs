@@ -81,6 +81,8 @@ internal sealed class ReaderDiagnosticsForm : Form
 
         lines.Add("");
         lines.Add("=== רישום פרוטוקול ההפעלה של רב-קו ===");
+        lines.Add("הפרוטוקול הצפוי: ravkav: (כתובת WSS של שרת התיווך)");
+        CheckProtocol(lines, "ravkav");
         CheckProtocol(lines, "ravkavonline");
         CheckProtocol(lines, "ravkavonline.exe");
 
