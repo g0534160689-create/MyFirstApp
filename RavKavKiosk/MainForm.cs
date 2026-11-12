@@ -1102,6 +1102,7 @@ internal sealed class MainForm : Form
         _adminManager = new AdminManagerForm(currentUrl);
         _adminManager.PickElementRequested += StartElementPicker;
         _adminManager.ScanLinksRequested += ScanCurrentPageLinks;
+        _adminManager.BlockedElementsRefreshRequested += ReportBlockedElements;
         _adminManager.RulesChanged += () => { _ = ApplyElementRulesAsync(); _ = ApplyRouteRulesAsync(); };
         _adminManager.AdminModeChanged += SetAdminMode;
         _adminManager.RavKavPanelVisibilityChanged += SetRavKavPanelVisibility;
@@ -1169,6 +1170,23 @@ internal sealed class MainForm : Form
         {
             using var doc = JsonDocument.Parse(e.WebMessageAsJson);
             var messageType = doc.RootElement.GetProperty("type").GetString();
+            if (messageType == "blocked-elements-report")
+            {
+                var items = new List<(string Selector, string Tag, string Text, int Count)>();
+                if (doc.RootElement.TryGetProperty("items", out var reportItems) && reportItems.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var item in reportItems.EnumerateArray())
+                    {
+                        var selector = item.TryGetProperty("selector", out var selectorValue) ? selectorValue.GetString() ?? "" : "";
+                        var tag = item.TryGetProperty("tag", out var tagValue) ? tagValue.GetString() ?? "element" : "element";
+                        var label = item.TryGetProperty("text", out var textValue) ? textValue.GetString() ?? "" : "";
+                        var count = item.TryGetProperty("count", out var countValue) && countValue.TryGetInt32(out var parsedCount) ? parsedCount : 1;
+                        items.Add((selector, tag, label, count));
+                    }
+                }
+                _adminManager?.ReceiveBlockedElementReport(items);
+                return;
+            }
             if (messageType == "link-scan")
             {
                 var links = new List<(string Url, string Text, bool Blocked)>();
@@ -1194,6 +1212,24 @@ internal sealed class MainForm : Form
             _elementPicking = false; _adminManager?.ReceivePickedSelector(selector, tag ?? "", href ?? "", label ?? "", pickedHost);
         }
         catch (Exception ex) { AppDiagnostics.Write("Read selected page element", ex); }
+    }
+
+    private async void ReportBlockedElements()
+    {
+        if (!_browserInitialized || _browser.CoreWebView2 is null)
+        {
+            MessageBox.Show(this, "אין עמוד פתוח לסריקת רכיבים.");
+            return;
+        }
+        try
+        {
+            await _browser.CoreWebView2.ExecuteScriptAsync("window.__kioskReportBlockedElements?.();");
+        }
+        catch (Exception ex)
+        {
+            AppDiagnostics.Write("Report blocked elements", ex);
+            MessageBox.Show(this, "לא ניתן לקבל כרגע את רשימת הרכיבים שנחסמו.");
+        }
     }
 
     private async void ScanCurrentPageLinks()
@@ -1303,6 +1339,29 @@ internal sealed class MainForm : Form
             });
             window.__kioskElementObserver.observe(document.documentElement, { childList: true, subtree: true });
           }
+          // Report real DOM matches on demand; keep this separate from the observer
+          // to avoid flooding the host while modern pages continuously update.
+          window.__kioskReportBlockedElements = () => {
+            const found = new Map();
+            for (const rule of rules) {
+              let nodes;
+              try { nodes = document.querySelectorAll(rule.selector); } catch { continue; }
+              let count = 0;
+              let sample = "";
+              for (const el of nodes) {
+                if (!(el instanceof HTMLElement) || !el.hasAttribute("data-kiosk-hidden")) continue;
+                count++;
+                if (!sample) sample = (el.innerText || el.getAttribute("aria-label") || el.getAttribute("title") || "").trim().replace(/\\s+/g, " ").slice(0, 100);
+              }
+              if (count) found.set(rule.selector, {
+                selector: rule.selector,
+                tag: (() => { try { return document.querySelector(rule.selector)?.tagName?.toLowerCase() || "element"; } catch { return "element"; } })(),
+                text: sample,
+                count
+              });
+            }
+            chrome.webview.postMessage({ type: "blocked-elements-report", items: [...found.values()].slice(0, 200) });
+          };
         })();
         """.Replace("__RULES__", json, StringComparison.Ordinal);
         try { await _browser.CoreWebView2.ExecuteScriptAsync(script); }
