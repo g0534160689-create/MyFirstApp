@@ -1579,9 +1579,13 @@ internal sealed class MainForm : Form
     {
         if (Uri.TryCreate(e.Uri, UriKind.Absolute, out var target) && IsRavKavReaderProtocol(target))
         {
-            e.Handled = true;
-            // Route the reader protocol through the existing external-scheme confirmation handler.
-            _browser.CoreWebView2.Navigate(e.Uri);
+            // Preserve the original popup navigation. Re-navigating the top-level
+            // WebView here discards the initiating frame/user-gesture context and
+            // causes WebView2 to report an empty InitiatingOrigin.
+            // Let WebView2 route the original URI to LaunchingExternalUriScheme.
+            e.Handled = false;
+            AppDiagnostics.Write("Reader protocol popup forwarded",
+                details: "Scheme: " + target.Scheme + "; top-level: " + SafeOriginForLog(_browser.CoreWebView2?.Source ?? ""));
             return;
         }
 
@@ -1606,63 +1610,47 @@ internal sealed class MainForm : Form
         {
             e.Cancel = true;
             _status.Text = "קישור חיצוני שאינו של קורא הכרטיסים נחסם.";
-            AppDiagnostics.Write("External protocol blocked", new InvalidOperationException("Unapproved external URI scheme."));
+            AppDiagnostics.Write("External protocol blocked",
+                new InvalidOperationException("Unapproved external URI scheme."));
             return;
         }
 
-        // Do not rely on WebView2's optional browser-style prompt: it can be
-        // suppressed by WebView2 settings/origin trust. Replace it with our
-        // own explicit confirmation, then ask Windows to resolve the URI.
-        e.Cancel = true;
         var origin = e.InitiatingOrigin ?? string.Empty;
-        // WebView2 may provide an empty initiating origin for a protocol request
-        // created by a cross-frame or popup flow. Fall back only to the current
-        // top-level page, and only if that page is one of the official service origins.
-        if (!IsTrustedReaderOrigin(origin) &&
+        var isTrusted = IsTrustedReaderOrigin(origin);
+
+        // If WebView2 reports an empty origin, do not synthesize a new navigation.
+        // This can occur when a page calls CoreWebView2.Navigate directly; in that
+        // case validate the currently displayed first-party page as a narrow fallback.
+        if (!isTrusted &&
+            string.IsNullOrWhiteSpace(origin) &&
             Uri.TryCreate(_browser.CoreWebView2?.Source, UriKind.Absolute, out var topLevel) &&
             IsTrustedReaderOrigin(topLevel.GetLeftPart(UriPartial.Authority)))
-            origin = topLevel.GetLeftPart(UriPartial.Authority);
-
-        if (!IsTrustedReaderOrigin(origin))
         {
+            origin = topLevel.GetLeftPart(UriPartial.Authority);
+            isTrusted = true;
+        }
+
+        if (!isTrusted)
+        {
+            e.Cancel = true;
             _status.Text = "בקשת קורא הכרטיסים נדחתה: מקור האתר אינו מאושר.";
             AppDiagnostics.Write("Reader protocol rejected", new InvalidOperationException(
-                "Untrusted initiating origin: " + SafeOriginForLog(e.InitiatingOrigin ?? "") +
-                "; top-level: " + SafeOriginForLog(_browser.CoreWebView2?.Source ?? "")));
+                "Scheme: " + target.Scheme +
+                "; initiating origin: " + SafeOriginForLog(e.InitiatingOrigin ?? "") +
+                "; top-level: " + SafeOriginForLog(_browser.CoreWebView2?.Source ?? "") +
+                "; user initiated: " + e.IsUserInitiated));
             return;
         }
 
-        _status.Text = "ממתין לאישור הפעלת קורא הכרטיסים...";
-        AppDiagnostics.Write("Reader protocol confirmation requested", new InvalidOperationException("Scheme: " + target.Scheme + "; Origin: " + SafeOriginForLog(origin)));
-
-        using var prompt = new ReaderLaunchConfirmationForm(origin, target.Scheme);
-        if (prompt.ShowDialog(this) != DialogResult.Yes)
-        {
-            _status.Text = "הפעלת קורא הכרטיסים בוטלה.";
-            AppDiagnostics.Write("Reader protocol launch declined", new InvalidOperationException("User declined external application launch."));
-            return;
-        }
-
-        try
-        {
-            Process.Start(new ProcessStartInfo
-            {
-                FileName = e.Uri,
-                UseShellExecute = true
-            });
-            _status.Text = "נשלחה בקשה להפעלת תוכנת קורא הכרטיסים.";
-            AppDiagnostics.Write("Reader protocol launch approved", new InvalidOperationException("Scheme: " + target.Scheme));
-        }
-        catch (Exception ex)
-        {
-            AppDiagnostics.Write("Reader protocol launch failed", ex);
-            _status.Text = "לא ניתן להפעיל את קורא הכרטיסים. בדוק שהתוכנה מותקנת.";
-            MessageBox.Show(this,
-                "Windows לא הצליח לפתוח את תוכנת קורא הכרטיסים.\r\n\r\n" +
-                "בדוק שהתוכנה מותקנת ושהפרוטוקול שלה רשום ב-Windows.\r\n\r\n" + ex.Message,
-                "שגיאה בהפעלת קורא הכרטיסים", MessageBoxButtons.OK, MessageBoxIcon.Error,
-                MessageBoxDefaultButton.Button1, MessageBoxOptions.RtlReading | MessageBoxOptions.RightAlign);
-        }
+        // Do not cancel trusted requests. WebView2 will show its native external
+        // application confirmation and dispatch the registered Windows protocol
+        // handler exactly as a browser does. Cancelling here and manually calling
+        // Process.Start bypasses that browser flow and can lose its activation context.
+        _status.Text = "ממתין לאישור הפעלת קורא הכרטיסים בחלון של Windows...";
+        AppDiagnostics.Write("Reader protocol delegated to WebView2",
+            details: "Scheme: " + target.Scheme +
+                     "; origin: " + SafeOriginForLog(origin) +
+                     "; user initiated: " + e.IsUserInitiated);
     }
 
     private static bool IsTrustedReaderOrigin(string origin)
