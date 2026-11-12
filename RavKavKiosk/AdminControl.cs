@@ -190,7 +190,12 @@ internal sealed class AdminManagerForm : Form
     {
         currentUrl = url; Text = "ניהול מערכת והרשאות"; Width = 790; Height = 590; MinimumSize = new Size(650, 480);
         StartPosition = FormStartPosition.CenterParent; RightToLeft = RightToLeft.Yes; RightToLeftLayout = true;
-        BuildUi(); RefreshRules();
+        BackColor = Color.FromArgb(11, 20, 34);
+        ForeColor = Color.FromArgb(232, 239, 248);
+        Font = new Font("Segoe UI", 9.5f, FontStyle.Regular);
+        BuildUi();
+        ApplyPremiumStyle(this);
+        RefreshRules();
     }
     private void BuildUi()
     {
@@ -307,6 +312,61 @@ internal sealed class AdminManagerForm : Form
         var change = new Button { Text = "שינוי סיסמה", Width = 110 }; change.Click += (_, _) => AdminAuthentication.ChangePassword(this);
         actions.Controls.AddRange([pick, blockElement, allowElement, remove, change]); root.Controls.Add(actions, 0, 7);
     }
+    private static void ApplyPremiumStyle(Control parent)
+    {
+        foreach (Control control in parent.Controls)
+        {
+            switch (control)
+            {
+                case TableLayoutPanel:
+                case FlowLayoutPanel:
+                    control.BackColor = Color.Transparent;
+                    break;
+                case ListBox list:
+                    list.BackColor = Color.FromArgb(17, 30, 48);
+                    list.ForeColor = Color.FromArgb(225, 235, 247);
+                    list.BorderStyle = BorderStyle.FixedSingle;
+                    list.Font = new Font("Segoe UI", 9.5f);
+                    break;
+                case TextBox input:
+                    input.BackColor = Color.FromArgb(20, 35, 54);
+                    input.ForeColor = Color.FromArgb(244, 247, 252);
+                    input.BorderStyle = BorderStyle.FixedSingle;
+                    input.Font = new Font("Segoe UI", 9.5f);
+                    break;
+                case ComboBox combo:
+                    combo.BackColor = Color.FromArgb(20, 35, 54);
+                    combo.ForeColor = Color.FromArgb(244, 247, 252);
+                    combo.FlatStyle = FlatStyle.Flat;
+                    break;
+                case Button button:
+                    button.FlatStyle = FlatStyle.Flat;
+                    button.UseVisualStyleBackColor = false;
+                    button.BackColor = Color.FromArgb(31, 49, 72);
+                    button.ForeColor = Color.FromArgb(242, 246, 252);
+                    button.FlatAppearance.BorderColor = Color.FromArgb(67, 94, 124);
+                    button.FlatAppearance.BorderSize = 1;
+                    button.Font = new Font("Segoe UI", 9f, FontStyle.Bold);
+                    button.Cursor = Cursors.Hand;
+                    button.MouseEnter += (_, _) => button.BackColor = Color.FromArgb(43, 68, 96);
+                    button.MouseLeave += (_, _) =>
+                    {
+                        if (button == null || button.IsDisposed) return;
+                        button.BackColor = Color.FromArgb(31, 49, 72);
+                    };
+                    break;
+                case Label label:
+                    label.ForeColor = Color.FromArgb(207, 220, 237);
+                    break;
+                case CheckBox check:
+                    check.ForeColor = Color.FromArgb(216, 228, 243);
+                    check.BackColor = Color.Transparent;
+                    break;
+            }
+            if (control.HasChildren) ApplyPremiumStyle(control);
+        }
+    }
+
     private void AddRoute(bool allowed)
     {
         var offset = policy.Routes.Count + policy.Elements.Count + policy.AllowedHosts.Count + 7 + AppSettings.Load().BlockedPaths.Count;
