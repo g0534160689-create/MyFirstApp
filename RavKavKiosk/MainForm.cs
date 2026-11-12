@@ -1244,7 +1244,7 @@ internal sealed class MainForm : Form
           const seen = new Set();
           const links = [...document.querySelectorAll("a[href]")].map(a => ({
             url: a.href,
-            text: (a.innerText || a.getAttribute("aria-label") || a.title || "").trim().replace(/\\s+/g, " ").slice(0,100)
+            text: (a.innerText || a.getAttribute("aria-label") || a.title || "").trim().replace(/\s+/g, " ").slice(0,100)
           })).filter(x => x.url.startsWith("https://") && !seen.has(x.url) && seen.add(x.url)).slice(0,300);
           chrome.webview.postMessage({type:"link-scan", links});
         })();
@@ -1351,7 +1351,7 @@ internal sealed class MainForm : Form
               for (const el of nodes) {
                 if (!(el instanceof HTMLElement) || !el.hasAttribute("data-kiosk-hidden")) continue;
                 count++;
-                if (!sample) sample = (el.innerText || el.getAttribute("aria-label") || el.getAttribute("title") || "").trim().replace(/\\s+/g, " ").slice(0, 100);
+                if (!sample) sample = (el.innerText || el.getAttribute("aria-label") || el.getAttribute("title") || "").trim().replace(/\s+/g, " ").slice(0, 100);
               }
               if (count) found.set(rule.selector, {
                 selector: rule.selector,
