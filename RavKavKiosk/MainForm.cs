@@ -948,8 +948,11 @@ internal sealed class MainForm : Form
                     CoreWebView2WebResourceRequestSourceKinds.All);
                 core.WebResourceRequested += OnWebResourceRequested;
 
-                await core.AddScriptToExecuteOnDocumentCreatedAsync(BuildRouteGuardScript(
-                    profileKey == "HopOn" ? _settings.StartUrl : _settings.RavKavStartUrl));
+                // Rav-Kav Online owns its complete multi-step workflow and reader bridge.
+                // Do not inject kiosk route wrappers into this site: even a harmless
+                // history/link hook can interfere with its reader bootstrap and SPA flow.
+                if (profileKey == "HopOn")
+                    await core.AddScriptToExecuteOnDocumentCreatedAsync(BuildRouteGuardScript(_settings.StartUrl));
                 core.DownloadStarting += (_, args) => args.Cancel = true;
                 core.LaunchingExternalUriScheme += OnLaunchingExternalUriScheme;
                 core.PermissionRequested += (_, args) =>
@@ -979,8 +982,13 @@ internal sealed class MainForm : Form
                     }
                     else
                     {
-                        _ = ApplyElementRulesAsync();
-                        if (_adminMode) _ = ApplyAdminModeToPageAsync();
+                        // Keep Rav-Kav pages pristine. Admin DOM replacements and
+                        // injected scripts can hide or mutate the reader bootstrap.
+                        if (_activeServiceProfile != "RavKavOnline")
+                        {
+                            _ = ApplyElementRulesAsync();
+                            if (_adminMode) _ = ApplyAdminModeToPageAsync();
+                        }
                     }
                 };
                 core.ProcessFailed += (_, args) =>
@@ -1608,51 +1616,68 @@ internal sealed class MainForm : Form
 
     private void OnLaunchingExternalUriScheme(object? sender, CoreWebView2LaunchingExternalUriSchemeEventArgs e)
     {
-        if (!Uri.TryCreate(e.Uri, UriKind.Absolute, out var target) || !IsRavKavReaderProtocol(target))
+        if (!Uri.TryCreate(e.Uri, UriKind.Absolute, out var target) ||
+            !IsRavKavReaderProtocol(target) ||
+            !IsValidRavKavReaderUri(e.Uri))
         {
             e.Cancel = true;
-            _status.Text = "קישור חיצוני שאינו של קורא הכרטיסים נחסם.";
-            AppDiagnostics.Write("External protocol blocked",
-                new InvalidOperationException("Unapproved external URI scheme."));
+            _status.Text = "בקשת הפעלת קורא לא מזוהה נחסמה.";
+            AppDiagnostics.Write("Rav-Kav external protocol rejected",
+                new InvalidOperationException("Unrecognized reader protocol request."));
             return;
         }
 
         var origin = e.InitiatingOrigin ?? string.Empty;
-        var isTrusted = IsTrustedReaderOrigin(origin);
-
-        // If WebView2 reports an empty origin, do not synthesize a new navigation.
-        // This can occur when a page calls CoreWebView2.Navigate directly; in that
-        // case validate the currently displayed first-party page as a narrow fallback.
-        if (!isTrusted &&
-            string.IsNullOrWhiteSpace(origin) &&
-            Uri.TryCreate(_browser.CoreWebView2?.Source, UriKind.Absolute, out var topLevel) &&
-            IsTrustedReaderOrigin(topLevel.GetLeftPart(UriPartial.Authority)))
+        var trustedOrigin = IsTrustedReaderOrigin(origin);
+        if (!trustedOrigin && string.IsNullOrWhiteSpace(origin) &&
+            Uri.TryCreate(_browser.CoreWebView2?.Source, UriKind.Absolute, out var topLevel))
         {
             origin = topLevel.GetLeftPart(UriPartial.Authority);
-            isTrusted = true;
+            trustedOrigin = IsTrustedReaderOrigin(origin);
         }
 
-        if (!isTrusted)
+        if (!trustedOrigin || _activeServiceProfile != "RavKavOnline")
         {
             e.Cancel = true;
-            _status.Text = "בקשת קורא הכרטיסים נדחתה: מקור האתר אינו מאושר.";
-            AppDiagnostics.Write("Reader protocol rejected", new InvalidOperationException(
-                "Scheme: " + target.Scheme +
-                "; initiating origin: " + SafeOriginForLog(e.InitiatingOrigin ?? "") +
-                "; top-level: " + SafeOriginForLog(_browser.CoreWebView2?.Source ?? "") +
-                "; user initiated: " + e.IsUserInitiated));
+            _status.Text = "בקשת קורא הכרטיסים נדחתה: מקור לא מאושר.";
+            AppDiagnostics.Write("Rav-Kav external protocol rejected",
+                new InvalidOperationException("Origin: " + SafeOriginForLog(e.InitiatingOrigin ?? "") +
+                                               "; top-level: " + SafeOriginForLog(_browser.CoreWebView2?.Source ?? "")));
             return;
         }
 
-        // Do not cancel trusted requests. WebView2 will show its native external
-        // application confirmation and dispatch the registered Windows protocol
-        // handler exactly as a browser does. Cancelling here and manually calling
-        // Process.Start bypasses that browser flow and can lose its activation context.
-        _status.Text = "ממתין לאישור הפעלת קורא הכרטיסים בחלון של Windows...";
-        AppDiagnostics.Write("Reader protocol delegated to WebView2",
-            details: "Scheme: " + target.Scheme +
-                     "; origin: " + SafeOriginForLog(origin) +
-                     "; user initiated: " + e.IsUserInitiated);
+        // Chrome does not require a separate in-app confirmation for this trusted
+        // reader agent. Dispatch the exact registered URI through Windows ShellExecute.
+        // WebView2's own prompt is suppressed so the kiosk flow remains in one window.
+        e.Cancel = true;
+        try
+        {
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = e.Uri,
+                UseShellExecute = true,
+                Verb = "open",
+                WindowStyle = ProcessWindowStyle.Hidden
+            });
+            _status.Text = "בקשת ההפעלה נשלחה לתוכנת קורא הכרטיסים...";
+            AppDiagnostics.Write("Rav-Kav reader agent dispatched",
+                details: "Scheme: " + target.Scheme + "; origin: " + SafeOriginForLog(origin) +
+                         "; uri length: " + e.Uri.Length);
+        }
+        catch (Exception ex)
+        {
+            _status.Text = "לא נמצאה תוכנת קורא רשומה ב-Windows. יש להתקין מחדש את רכיב הקורא.";
+            AppDiagnostics.Write("Rav-Kav reader agent dispatch failed",
+                new InvalidOperationException("Windows could not dispatch the registered reader protocol.", ex));
+        }
+    }
+
+    private static bool IsValidRavKavReaderUri(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value) || value.Length > 4096 ||
+            value.Any(char.IsControl)) return false;
+        return value.StartsWith("ravkav:wss://proxy.ravkavonline.co.il/",
+            StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool IsTrustedReaderOrigin(string origin)
