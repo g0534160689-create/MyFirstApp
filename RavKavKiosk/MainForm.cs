@@ -1099,6 +1099,7 @@ internal sealed class MainForm : Form
         _adminManager.RavKavPanelVisibilityChanged += SetRavKavPanelVisibility;
         _adminManager.HopOnPanelVisibilityChanged += SetHopOnPanelVisibility;
         _adminManager.ThemeChanged += ApplyTheme;
+        _adminManager.ReaderDiagnosticsRequested += () => { using var diagnostics = new ReaderDiagnosticsForm(); diagnostics.ShowDialog(this); };
         ApplyTheme(AdminPolicyStore.Load().ThemeId);
         _adminManager.FormClosed += (_, _) => { _adminManager = null; SetAdminMode(false); };
         _adminManager.Show(this);
@@ -1226,7 +1227,7 @@ internal sealed class MainForm : Form
         if (!Uri.TryCreate(_browser.CoreWebView2.Source, UriKind.Absolute, out var uri)) return;
         var rules = AdminPolicyStore.ElementRules(uri.Host)
             .Where(r => !r.Allowed)
-            .Select(r => new { selector = r.Selector, replacementText = r.ReplacementText ?? "", replacementImageDataUri = TryLoadReplacementImageDataUri(r.ReplacementImagePath) })
+            .Select(r => new { selector = r.Selector, replacementText = r.ReplacementText ?? "", replacementImageDataUri = TryLoadReplacementImageDataUri(r.ReplacementImagePath), imageFit = r.ReplacementImageFit == "cover" ? "cover" : "contain" })
             .ToArray();
         var json = JsonSerializer.Serialize(rules);
         var script = """
@@ -1271,7 +1272,7 @@ internal sealed class MainForm : Form
                   replacement.style.overflow = "hidden";
                   if (rule.replacementImageDataUri) {
                     const image = document.createElement("img"); image.src = rule.replacementImageDataUri; image.alt = "תמונה חלופית"; image.draggable = false;
-                    image.style.display = "block"; image.style.width = "100%"; image.style.height = "100%"; image.style.maxWidth = "100%"; image.style.maxHeight = "100%"; image.style.objectFit = "contain"; image.style.objectPosition = "center";
+                    image.style.display = "block"; image.style.width = "100%"; image.style.height = "100%"; image.style.maxWidth = "100%"; image.style.maxHeight = "100%"; image.style.objectFit = rule.imageFit === "cover" ? "cover" : "contain"; image.style.objectPosition = "center";
                     replacement.appendChild(image);
                   } else { replacement.textContent = rule.replacementText; }
                   el.parentNode?.insertBefore(replacement, el);
@@ -1614,10 +1615,20 @@ internal sealed class MainForm : Form
         // own explicit confirmation, then ask Windows to resolve the URI.
         e.Cancel = true;
         var origin = e.InitiatingOrigin ?? string.Empty;
+        // WebView2 may provide an empty initiating origin for a protocol request
+        // created by a cross-frame or popup flow. Fall back only to the current
+        // top-level page, and only if that page is one of the official service origins.
+        if (!IsTrustedReaderOrigin(origin) &&
+            Uri.TryCreate(_browser.CoreWebView2?.Source, UriKind.Absolute, out var topLevel) &&
+            IsTrustedReaderOrigin(topLevel.GetLeftPart(UriPartial.Authority)))
+            origin = topLevel.GetLeftPart(UriPartial.Authority);
+
         if (!IsTrustedReaderOrigin(origin))
         {
             _status.Text = "בקשת קורא הכרטיסים נדחתה: מקור האתר אינו מאושר.";
-            AppDiagnostics.Write("Reader protocol rejected", new InvalidOperationException("Untrusted initiating origin: " + SafeOriginForLog(origin)));
+            AppDiagnostics.Write("Reader protocol rejected", new InvalidOperationException(
+                "Untrusted initiating origin: " + SafeOriginForLog(e.InitiatingOrigin ?? "") +
+                "; top-level: " + SafeOriginForLog(_browser.CoreWebView2?.Source ?? "")));
             return;
         }
 
