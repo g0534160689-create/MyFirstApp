@@ -1233,12 +1233,19 @@ internal sealed class MainForm : Form
         (() => {
           const rules = __RULES__;
           const marker = "data-kiosk-replacement-for";
+          // Remove the previous pass cleanly when an administrator edits the rules.
+          document.querySelectorAll("[data-kiosk-replacement]").forEach(node => node.remove());
+          document.querySelectorAll("[data-kiosk-hidden]").forEach(node => {
+            node.style.removeProperty("display");
+            node.removeAttribute("data-kiosk-hidden");
+          });
           const apply = () => {
             for (const rule of rules) {
               let elements;
               try { elements = document.querySelectorAll(rule.selector); } catch { continue; }
               for (const el of elements) {
                 if (!(el instanceof HTMLElement) || el.hasAttribute("data-kiosk-replacement")) continue;
+                if (rule.replacementText && el.previousElementSibling?.getAttribute(marker) === rule.selector) continue;
                 if (rule.replacementText) {
                   const replacement = document.createElement("div");
                   replacement.setAttribute("data-kiosk-replacement", "true");
