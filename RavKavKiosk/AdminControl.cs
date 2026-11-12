@@ -29,6 +29,7 @@ internal sealed class ElementPolicyRule
     public string Host { get; set; } = "";
     public string Selector { get; set; } = "";
     public bool Allowed { get; set; }
+    public string ReplacementText { get; set; } = "";
 }
 
 internal static class AdminPolicyStore
@@ -199,6 +200,7 @@ internal sealed class AdminManagerForm : Form
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 74));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
         Controls.Add(root);
         root.Controls.Add(new Label { Text = "ניהול הרשאות — כתובות, נתיבים ורכיבים בעמוד", Dock = DockStyle.Fill, Font = new Font("Segoe UI", 13, FontStyle.Bold), TextAlign = ContentAlignment.MiddleRight }, 0, 0);
@@ -282,13 +284,23 @@ internal sealed class AdminManagerForm : Form
         var addHost = new Button { Text = "הוסף לאתרים המורשים", Width = 170 }; addHost.Click += (_, _) => AddHost();
         host.Controls.Add(addHost); root.Controls.Add(host, 0, 3);
         root.Controls.Add(rules, 0, 4); root.Controls.Add(selected, 0, 5);
+        var replacementRow = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft, WrapContents = false, AutoScroll = true };
+        replacementRow.Controls.Add(new Label { Text = "טקסט חלופי במקום הרכיב (אופציונלי):", AutoSize = true, Padding = new Padding(0, 8, 0, 0) });
+        var replacementInput = new TextBox { Width = 390, Height = 52, Multiline = true, ScrollBars = ScrollBars.Vertical, MaxLength = 1000 };
+        replacementInput.PlaceholderText = "השאר ריק להסתרה בלבד; כתוב כאן טקסט להצגה באותו מקום";
+        replacementRow.Controls.Add(replacementInput);
+        var replaceElement = new Button { Text = "הסתר והצג במקום", Width = 145, Height = 48 };
+        replaceElement.Click += (_, _) => SaveSelectedElement(false, replacementInput.Text.Trim());
+        replacementRow.Controls.Add(replaceElement);
+        root.Controls.Add(replacementRow, 0, 6);
+
         var actions = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft };
         var pick = new Button { Text = "בחירת רכיב בלחיצה שמאלית", Width = 190 }; pick.Click += (_, _) => { Hide(); PickElementRequested?.Invoke(); };
-        var blockElement = new Button { Text = "חסום רכיב שנבחר", Width = 140 }; blockElement.Click += (_, _) => SaveSelectedElement(false);
-        var allowElement = new Button { Text = "אפשר רכיב שנבחר", Width = 140 }; allowElement.Click += (_, _) => SaveSelectedElement(true);
+        var blockElement = new Button { Text = "הסתר רכיב שנבחר", Width = 140 }; blockElement.Click += (_, _) => SaveSelectedElement(false);
+        var allowElement = new Button { Text = "הצג רכיב שנבחר", Width = 140 }; allowElement.Click += (_, _) => SaveSelectedElement(true);
         var remove = new Button { Text = "מחק כלל מסומן", Width = 120 }; remove.Click += (_, _) => RemoveSelected();
         var change = new Button { Text = "שינוי סיסמה", Width = 110 }; change.Click += (_, _) => AdminAuthentication.ChangePassword(this);
-        actions.Controls.AddRange([pick, blockElement, allowElement, remove, change]); root.Controls.Add(actions, 0, 6);
+        actions.Controls.AddRange([pick, blockElement, allowElement, remove, change]); root.Controls.Add(actions, 0, 7);
     }
     private void AddRoute(bool allowed)
     {
@@ -336,7 +348,7 @@ internal sealed class AdminManagerForm : Form
         selected.Text = $"נסרקו {scannedLinks.Count} קישורים בעמוד. בחר קישור מהרשימה כדי לטעון אותו לשדה הנתיב, ואז לחץ אפשר או חסום.";
         Show(); Activate();
     }
-    private void SaveSelectedElement(bool allowed)
+    private void SaveSelectedElement(bool allowed, string replacementText = "")
     {
         var marker = ": ";
         var split = selected.Text.LastIndexOf(marker, StringComparison.Ordinal);
@@ -344,8 +356,11 @@ internal sealed class AdminManagerForm : Form
         var host = selectedElementHost;
         if (selector.Length == 0 || string.IsNullOrWhiteSpace(host)) { MessageBox.Show(this, "בחר תחילה רכיב מתוך האתר באמצעות לחיצה שמאלית או בחר כלל רכיב מהרשימה."); return; }
         policy.Elements.RemoveAll(r => r.Host.Equals(host, StringComparison.OrdinalIgnoreCase) && r.Selector == selector);
-        policy.Elements.Add(new ElementPolicyRule(host, selector, allowed));
+        var rule = new ElementPolicyRule(host, selector, allowed) { ReplacementText = allowed ? "" : replacementText.Trim() };
+        policy.Elements.Add(rule);
         AdminPolicyStore.Save(policy); RefreshRules(); RulesChanged?.Invoke();
+        selected.Text = allowed ? "הרכיב יוצג מחדש." :
+            rule.ReplacementText.Length > 0 ? "הרכיב הוסתר ותוכן חלופי יוצג במקומו." : "הרכיב הוסתר.";
     }
     private void RemoveSelected()
     {
@@ -373,7 +388,7 @@ internal sealed class AdminManagerForm : Form
     {
         rules.Items.Clear();
         foreach (var r in policy.Routes) rules.Items.Add($"{(r.Allowed ? "מאושר" : "חסום")} | {r.Host}{r.Path}");
-        foreach (var e in policy.Elements) rules.Items.Add($"{(e.Allowed ? "מוצג" : "מוסתר")} | {e.Host} | {e.Selector}");
+        foreach (var e in policy.Elements) rules.Items.Add($"{(e.Allowed ? "מוצג" : e.ReplacementText.Length > 0 ? "מוסתר + חלופי" : "מוסתר")} | {e.Host} | {e.Selector}");
         foreach (var h in policy.AllowedHosts) rules.Items.Add($"דומיין מורשה | {h}");
         foreach (var h in new[] { "hopon.co.il", "ravkavonline.co.il", "donors.matara.pro", "www.matara.pro", "matara.pro", "rishumon.net", "tora.irom.co.il" })
             rules.Items.Add($"דומיין מורשה מובנה | {h}");
