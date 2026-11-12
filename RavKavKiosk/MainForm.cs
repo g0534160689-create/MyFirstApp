@@ -1644,8 +1644,32 @@ internal sealed class MainForm : Form
         }
     }
 
+    private static bool IsGooglePayUri(string? value)
+    {
+        if (!Uri.TryCreate(value, UriKind.Absolute, out var uri) ||
+            !uri.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        var host = uri.IdnHost.TrimEnd('.').ToLowerInvariant();
+        return host.Equals("pay.google.com", StringComparison.Ordinal) ||
+               host.EndsWith(".pay.google.com", StringComparison.Ordinal) ||
+               host.Equals("payments.google.com", StringComparison.Ordinal) ||
+               host.EndsWith(".payments.google.com", StringComparison.Ordinal) ||
+               host.Equals("wallet.google.com", StringComparison.Ordinal) ||
+               host.EndsWith(".wallet.google.com", StringComparison.Ordinal);
+    }
+
     private async void OnNewWindowRequested(object? sender, CoreWebView2NewWindowRequestedEventArgs e)
     {
+        if (IsGooglePayUri(e.Uri))
+        {
+            e.Handled = true;
+            _status.Text = "חלון Google Pay נחסם בהתאם להגדרות המערכת.";
+            AppDiagnostics.Write("Google Pay popup blocked",
+                details: "Target: " + SafeOriginForLog(e.Uri));
+            return;
+        }
+
         if (Uri.TryCreate(e.Uri, UriKind.Absolute, out var target) && IsRavKavReaderProtocol(target))
         {
             // Custom reader URI is handled by LaunchingExternalUriScheme, not an HTTPS popup.
@@ -1684,6 +1708,14 @@ internal sealed class MainForm : Form
                 if (Uri.TryCreate(navigation.Uri, UriKind.Absolute, out var next) &&
                     next.Equals(new Uri("about:blank")))
                     return;
+                if (IsGooglePayUri(navigation.Uri))
+                {
+                    navigation.Cancel = true;
+                    _status.Text = "חלון Google Pay נחסם בהתאם להגדרות המערכת.";
+                    AppDiagnostics.Write("Google Pay popup redirect blocked",
+                        details: "Target: " + SafeOriginForLog(navigation.Uri));
+                    return;
+                }
                 if (!Uri.TryCreate(navigation.Uri, UriKind.Absolute, out next) ||
                     !IsAllowedNavigationUri(next) || IsBlockedNavigationUri(next) ||
                     !next.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
