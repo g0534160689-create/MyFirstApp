@@ -48,6 +48,8 @@ internal static class AdminPolicyStore
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "DaatAharon", "RavKavKiosk");
     private static readonly string FilePath = Path.Combine(Folder, "admin-policy.json");
     private static readonly string BackupPath = FilePath + ".bak";
+    private static readonly string LegacyFilePath = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "RavKavKiosk", "admin-policy.json");
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true, PropertyNameCaseInsensitive = true };
     public static string StoragePath => FilePath;
 
@@ -68,6 +70,26 @@ internal static class AdminPolicyStore
                 AppDiagnostics.Write("Admin policy load failed",
                     new InvalidDataException("Unable to load " + Path.GetFileName(candidate), ex));
             }
+        }
+
+        // One-time, non-destructive migration from the previous application data folder.
+        try
+        {
+            if (File.Exists(LegacyFilePath))
+            {
+                var legacyJson = File.ReadAllText(LegacyFilePath, Encoding.UTF8);
+                var legacy = JsonSerializer.Deserialize<AdminPolicy>(legacyJson, JsonOptions);
+                if (legacy is not null)
+                {
+                    Save(legacy);
+                    AppDiagnostics.Write("Admin policy migrated", details: "From " + LegacyFilePath + " to " + FilePath);
+                    return legacy;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            AppDiagnostics.Write("Legacy admin policy migration failed", ex);
         }
         return new AdminPolicy();
     }
@@ -319,6 +341,7 @@ internal sealed class AdminManagerForm : Form
     private readonly ListBox rules = new() { Dock = DockStyle.Fill, HorizontalScrollbar = true, SelectionMode = SelectionMode.MultiExtended };
     private readonly List<(string Url, string Text, bool Blocked)> scannedLinks = [];
     private readonly List<ElementPolicyRule> displayedElements = [];
+    private readonly List<(string Selector, string Tag, string Text, int Count)> runtimeBlockedElements = [];
     private ComboBox? elementFilter;
     private ComboBox? elementSort;
     private TextBox? replacementInput;
@@ -330,6 +353,7 @@ internal sealed class AdminManagerForm : Form
     private string selectedElementHost = "";
     public event Action? PickElementRequested;
     public event Action? ScanLinksRequested;
+    public event Action? BlockedElementsRefreshRequested;
     public event Action? RulesChanged;
     public event Action<bool>? AdminModeChanged;
     public event Action<bool>? RavKavPanelVisibilityChanged;
@@ -457,6 +481,9 @@ internal sealed class AdminManagerForm : Form
         selectionBar.Controls.Add(elementFilter);
         selectionBar.Controls.Add(new Label { Text = "מיון:", AutoSize = true, Padding = new Padding(4, 8, 0, 0) });
         selectionBar.Controls.Add(elementSort);
+        var viewBlocked = new Button { Text = "צפה ברכיבים שנחסמו בפועל", Width = 205, Height = 30 };
+        viewBlocked.Click += (_, _) => BlockedElementsRefreshRequested?.Invoke();
+        selectionBar.Controls.Add(viewBlocked);
         root.Controls.Add(selectionBar, 0, 5);
         var replacementRow = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft, WrapContents = true, AutoScroll = true };
         replacementRow.Controls.Add(new Label { Text = "טקסט חלופי:", AutoSize = true, Padding = new Padding(0, 8, 0, 0) });
@@ -699,6 +726,20 @@ internal sealed class AdminManagerForm : Form
         selected.Text = $"נסרקו {scannedLinks.Count} קישורים בעמוד. בחר קישור מהרשימה כדי לטעון אותו לשדה הנתיב, ואז לחץ אפשר או חסום.";
         Show(); Activate();
     }
+    public void ReceiveBlockedElementReport(IEnumerable<(string Selector, string Tag, string Text, int Count)> items)
+    {
+        runtimeBlockedElements.Clear();
+        runtimeBlockedElements.AddRange(items
+            .Where(x => !string.IsNullOrWhiteSpace(x.Selector))
+            .Take(200)
+            .Select(x => (x.Selector, x.Tag ?? "element", x.Text ?? "", Math.Clamp(x.Count, 1, 100000))));
+        RefreshRules();
+        var total = runtimeBlockedElements.Sum(x => x.Count);
+        selected.Text = total == 0
+            ? "לא נמצאו כרגע רכיבים מוסתרים בפועל בעמוד הפתוח. הכללים השמורים עדיין מופיעים ברשימת הניהול."
+            : $"נמצאו {total} מופעים מוסתרים בפועל בעמוד. הרשימה מוצגת בתחתית.";
+        Show(); Activate();
+    }
     private void SaveSelectedElement(bool allowed, string replacementText = "", string replacementImagePath = "")
     {
         var marker = ": ";
@@ -785,6 +826,12 @@ internal sealed class AdminManagerForm : Form
                 !AppSettings.Load().IsAllowedNavigationUri(linkUri) || AppSettings.Load().IsBlockedNavigationUri(linkUri);
             scannedLinks[i] = (link.Url, link.Text, blocked);
             rules.Items.Add($"{(blocked ? "חסום בעמוד" : "פתוח בעמוד")} | {link.Text} | {link.Url}");
+        }
+        if (runtimeBlockedElements.Count > 0)
+        {
+            rules.Items.Add($"—— רכיבים שנחסמו בפועל: {runtimeBlockedElements.Sum(x => x.Count)} מופעים ——");
+            foreach (var item in runtimeBlockedElements)
+                rules.Items.Add($"נחסם בפועל | {item.Tag} ×{item.Count} | {item.Text} | {item.Selector}");
         }
         rules.SelectedIndexChanged -= OnRuleSelectionChanged;
         rules.SelectedIndexChanged += OnRuleSelectionChanged;
