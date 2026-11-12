@@ -34,6 +34,14 @@ internal sealed class ElementPolicyRule
     public string ReplacementImageFit { get; set; } = "contain";
 }
 
+internal sealed class AdminPolicyExport
+{
+    public int FormatVersion { get; set; } = 1;
+    public DateTime ExportedAtUtc { get; set; } = DateTime.UtcNow;
+    public AdminPolicy Policy { get; set; } = new();
+    public Dictionary<string, string> ImageAssets { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+}
+
 internal static class AdminPolicyStore
 {
     private static readonly string Folder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "RavKavKiosk");
@@ -50,6 +58,90 @@ internal static class AdminPolicyStore
         File.WriteAllText(temp, JsonSerializer.Serialize(policy, new JsonSerializerOptions { WriteIndented = true }), new UTF8Encoding(false));
         File.Move(temp, FilePath, true);
     }
+    public static void ExportBundle(AdminPolicy policy, string destination)
+    {
+        var bundle = new AdminPolicyExport
+        {
+            FormatVersion = 1,
+            ExportedAtUtc = DateTime.UtcNow,
+            Policy = JsonSerializer.Deserialize<AdminPolicy>(JsonSerializer.Serialize(policy)) ?? new AdminPolicy()
+        };
+        long totalBytes = 0;
+        foreach (var element in bundle.Policy.Elements)
+        {
+            var path = element.ReplacementImagePath;
+            if (string.IsNullOrWhiteSpace(path) || !File.Exists(path)) { element.ReplacementImagePath = ""; continue; }
+            var info = new FileInfo(path);
+            if (info.Length > 8 * 1024 * 1024) throw new InvalidDataException("תמונה חורגת ממגבלת 8MB: " + Path.GetFileName(path));
+            totalBytes += info.Length;
+            if (totalBytes > 40 * 1024 * 1024) throw new InvalidDataException("סך התמונות לייצוא חורג מ־40MB.");
+            if (!bundle.ImageAssets.ContainsKey(path))
+                bundle.ImageAssets[path] = Convert.ToBase64String(File.ReadAllBytes(path));
+        }
+        var json = JsonSerializer.Serialize(bundle, new JsonSerializerOptions { WriteIndented = true });
+        var temp = destination + ".tmp";
+        File.WriteAllText(temp, json, new UTF8Encoding(false));
+        File.Move(temp, destination, true);
+    }
+
+    public static AdminPolicy ImportBundle(string source)
+    {
+        var info = new FileInfo(source);
+        if (!info.Exists || info.Length > 50 * 1024 * 1024) throw new InvalidDataException("קובץ הייבוא אינו תקין או גדול מ־50MB.");
+        var bundle = JsonSerializer.Deserialize<AdminPolicyExport>(File.ReadAllText(source))
+            ?? throw new InvalidDataException("קובץ הגיבוי ריק או פגום.");
+        if (bundle.FormatVersion != 1 || bundle.Policy is null) throw new InvalidDataException("גרסת קובץ הגיבוי אינה נתמכת.");
+        var policy = bundle.Policy;
+        if (policy.Routes.Count > 5000 || policy.Elements.Count > 5000 || policy.AllowedHosts.Count > 1000)
+            throw new InvalidDataException("קובץ הגיבוי מכיל מספר חריג של כללים.");
+        foreach (var route in policy.Routes)
+        {
+            if (string.IsNullOrWhiteSpace(route.Host) || Uri.CheckHostName(route.Host) == UriHostNameType.Unknown ||
+                string.IsNullOrWhiteSpace(route.Path) || !route.Path.StartsWith('/') || route.Path.Length > 2048 ||
+                route.Path.Any(char.IsControl))
+                throw new InvalidDataException("נמצא כלל כתובת לא תקין בקובץ.");
+        }
+        foreach (var host in policy.AllowedHosts)
+            if (string.IsNullOrWhiteSpace(host) || Uri.CheckHostName(host) == UriHostNameType.Unknown)
+                throw new InvalidDataException("נמצא דומיין לא תקין בקובץ.");
+        foreach (var element in policy.Elements)
+            if (string.IsNullOrWhiteSpace(element.Host) || Uri.CheckHostName(element.Host) == UriHostNameType.Unknown ||
+                string.IsNullOrWhiteSpace(element.Selector) || element.Selector.Length > 2048 ||
+                element.Selector.Any(char.IsControl) || (element.ReplacementText?.Length ?? 0) > 1000)
+                throw new InvalidDataException("נמצא כלל רכיב לא תקין בקובץ.");
+
+        var imageFolder = Path.Combine(Folder, "ImportedImages");
+        Directory.CreateDirectory(imageFolder);
+        long totalBytes = 0;
+        foreach (var element in policy.Elements)
+        {
+            if (string.IsNullOrWhiteSpace(element.ReplacementImagePath)) continue;
+            if (!bundle.ImageAssets.TryGetValue(element.ReplacementImagePath, out var encoded))
+            {
+                element.ReplacementImagePath = "";
+                continue;
+            }
+            var ext = Path.GetExtension(element.ReplacementImagePath).ToLowerInvariant();
+            if (ext is not (".png" or ".jpg" or ".jpeg" or ".webp" or ".gif" or ".bmp"))
+                throw new InvalidDataException("קובץ תמונה בעל סיומת לא נתמכת.");
+            byte[] bytes;
+            try { bytes = Convert.FromBase64String(encoded); }
+            catch (FormatException) { throw new InvalidDataException("נתוני תמונה פגומים בקובץ הגיבוי."); }
+            if (bytes.Length == 0 || bytes.Length > 8 * 1024 * 1024)
+                throw new InvalidDataException("תמונה בקובץ הגיבוי חורגת ממגבלת 8MB.");
+            totalBytes += bytes.Length;
+            if (totalBytes > 40 * 1024 * 1024) throw new InvalidDataException("סך התמונות בייבוא חורג מ־40MB.");
+            var target = Path.Combine(imageFolder, Guid.NewGuid().ToString("N") + ext);
+            File.WriteAllBytes(target, bytes);
+            element.ReplacementImagePath = target;
+            element.ReplacementImageFit = element.ReplacementImageFit == "cover" ? "cover" : "contain";
+        }
+        foreach (var route in policy.Routes) route.Host = route.Host.Trim().TrimEnd('.').ToLowerInvariant();
+        foreach (var element in policy.Elements) element.Host = element.Host.Trim().TrimEnd('.').ToLowerInvariant();
+        policy.AllowedHosts = policy.AllowedHosts.Select(h => h.Trim().TrimEnd('.').ToLowerInvariant()).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        return policy;
+    }
+
     public static bool? RouteDecision(Uri uri)
     {
         var p = Load();
@@ -351,7 +443,7 @@ internal sealed class AdminManagerForm : Form
         replaceWithImage.Click += (_, _) => SaveSelectedElement(false, replacementInput.Text.Trim(), imagePathInput.Text.Trim()); replacementRow.Controls.Add(replaceWithImage);
         root.Controls.Add(replacementRow, 0, 6);
 
-        var actions = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft };
+        var actions = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft, WrapContents = true, AutoScroll = true };
         var pick = new Button { Text = "בחירת רכיב בלחיצה שמאלית", Width = 190 }; pick.Click += (_, _) => { Hide(); PickElementRequested?.Invoke(); };
         var blockElement = new Button { Text = "הסתר רכיב שנבחר", Width = 140 }; blockElement.Click += (_, _) => SaveSelectedElement(false);
         var allowElement = new Button { Text = "הצג רכיב שנבחר", Width = 140 }; allowElement.Click += (_, _) => SaveSelectedElement(true);
@@ -365,7 +457,11 @@ internal sealed class AdminManagerForm : Form
         resetElements.Click += (_, _) => ResetElementRules();
         var resetAll = new Button { Text = "אפס כללי מנהל", Width = 120 };
         resetAll.Click += (_, _) => ResetAllCustomRules();
-        actions.Controls.AddRange([pick, blockElement, allowElement, remove, resetBlacklist, resetElements, resetAll, readerDiagnostics, change]); root.Controls.Add(actions, 0, 7);
+        var exportRules = new Button { Text = "ייצוא כללי חסימה", Width = 145 };
+        exportRules.Click += (_, _) => ExportRules();
+        var importRules = new Button { Text = "ייבוא כללי חסימה", Width = 145 };
+        importRules.Click += (_, _) => ImportRules();
+        actions.Controls.AddRange([pick, blockElement, allowElement, remove, resetBlacklist, resetElements, resetAll, exportRules, importRules, readerDiagnostics, change]); root.Controls.Add(actions, 0, 7);
     }
     private void ApplyPremiumStyle(Control parent)
     {
@@ -427,6 +523,56 @@ internal sealed class AdminManagerForm : Form
             }
             if (control.HasChildren) ApplyPremiumStyle(control);
         }
+    }
+
+    private void ExportRules()
+    {
+        using var dialog = new SaveFileDialog
+        {
+            Title = "ייצוא גיבוי כללי חסימה",
+            Filter = "גיבוי מערכת JSON (*.json)|*.json",
+            FileName = "RavKavKiosk-Policy-Backup.json",
+            OverwritePrompt = true
+        };
+        if (dialog.ShowDialog(this) != DialogResult.OK) return;
+        try
+        {
+            AdminPolicyStore.ExportBundle(policy, dialog.FileName);
+            MessageBox.Show(this, "הייצוא הושלם. הגיבוי כולל כללי נתיבים, רכיבים ותמונות חלופיות.", "ייצוא הושלם", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+        catch (Exception ex) { MessageBox.Show(this, "הייצוא נכשל: " + ex.Message, "שגיאת ייצוא", MessageBoxButtons.OK, MessageBoxIcon.Error); }
+    }
+
+    private void ImportRules()
+    {
+        using var dialog = new OpenFileDialog
+        {
+            Title = "ייבוא גיבוי כללי חסימה",
+            Filter = "גיבוי מערכת JSON (*.json)|*.json",
+            CheckFileExists = true
+        };
+        if (dialog.ShowDialog(this) != DialogResult.OK) return;
+        if (MessageBox.Show(this, "ייבוא הגיבוי יחליף את כללי הנתיבים, הרכיבים והדומיינים הידניים הקיימים. להמשיך?",
+            "אישור החלפת כללים", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
+        try
+        {
+            var imported = AdminPolicyStore.ImportBundle(dialog.FileName);
+            policy.Routes = imported.Routes;
+            policy.Elements = imported.Elements;
+            policy.AllowedHosts = imported.AllowedHosts;
+            policy.ThemeId = imported.ThemeId;
+            policy.ShowRavKavPanel = imported.ShowRavKavPanel;
+            policy.ShowHopOnPanel = imported.ShowHopOnPanel;
+            AdminPolicyStore.Save(policy);
+            RefreshRules();
+            RulesChanged?.Invoke();
+            ThemeChanged?.Invoke(policy.ThemeId);
+            RavKavPanelVisibilityChanged?.Invoke(policy.ShowRavKavPanel);
+            HopOnPanelVisibilityChanged?.Invoke(policy.ShowHopOnPanel);
+            selected.Text = "הייבוא הושלם. הכללים והתמונות שוחזרו.";
+            MessageBox.Show(this, "הייבוא הושלם בהצלחה.", "ייבוא הושלם", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+        catch (Exception ex) { MessageBox.Show(this, "הייבוא נכשל ולא הוחלפו הכללים: " + ex.Message, "שגיאת ייבוא", MessageBoxButtons.OK, MessageBoxIcon.Error); }
     }
 
     private void ResetBlacklist()
