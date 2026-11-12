@@ -193,9 +193,11 @@ internal sealed class MainForm : Form
         heroLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         heroLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 150));
         var heroText = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3, BackColor = Color.Transparent };
-        heroText.RowStyles.Add(new RowStyle(SizeType.Percent, 43));
+        heroText.RowCount = 4;
+        heroText.RowStyles.Add(new RowStyle(SizeType.Percent, 37));
         heroText.RowStyles.Add(new RowStyle(SizeType.Percent, 30));
-        heroText.RowStyles.Add(new RowStyle(SizeType.Percent, 27));
+        heroText.RowStyles.Add(new RowStyle(SizeType.Percent, 18));
+        heroText.RowStyles.Add(new RowStyle(SizeType.Percent, 15));
         heroText.Controls.Add(new Label
         {
             Text = "המרכז הדיגיטלי", Dock = DockStyle.Fill,
@@ -204,16 +206,22 @@ internal sealed class MainForm : Form
         }, 0, 0);
         heroText.Controls.Add(new Label
         {
-            Text = "ישיבת דעת אהרן  ·  כל השירותים במקום אחד", Dock = DockStyle.Fill,
-            ForeColor = Color.FromArgb(245, 248, 252), Font = new Font("Segoe UI", 13, FontStyle.Bold),
+            Text = "ישיבת דעת אהרן  ·  כל מה שצריך במקום אחד, בלי לצאת מהישיבה", Dock = DockStyle.Fill,
+            ForeColor = Color.FromArgb(245, 248, 252), Font = new Font("Segoe UI", 12, FontStyle.Bold),
             TextAlign = ContentAlignment.MiddleRight, BackColor = Color.Transparent
         }, 0, 1);
+        heroText.Controls.Add(new Label
+        {
+            Text = "השימוש ברב־קו לתקופת ניסיון", Dock = DockStyle.Fill,
+            ForeColor = Color.FromArgb(255, 222, 161), Font = new Font("Segoe UI", 10, FontStyle.Bold),
+            TextAlign = ContentAlignment.MiddleRight, BackColor = Color.Transparent
+        }, 0, 2);
         heroText.Controls.Add(new Label
         {
             Text = "בשיתוף מערכת אוצר החכמה  •  שע״י ישיבתנו הקדושה", Dock = DockStyle.Fill,
             ForeColor = Color.FromArgb(178, 195, 213), Font = new Font("Segoe UI", 9),
             TextAlign = ContentAlignment.TopRight, BackColor = Color.Transparent
-        }, 0, 2);
+        }, 0, 3);
 
         var logo = new PictureBox { Dock = DockStyle.Fill, SizeMode = PictureBoxSizeMode.Zoom, BackColor = Color.FromArgb(24, 47, 72), Padding = new Padding(14), BorderStyle = BorderStyle.None };
         logo.Controls.Add(new Label { Text = "דעת אהרן", Dock = DockStyle.Fill, ForeColor = Color.FromArgb(255, 222, 161), Font = new Font("Segoe UI", 16, FontStyle.Bold), TextAlign = ContentAlignment.MiddleCenter, BackColor = Color.Transparent });
@@ -946,6 +954,19 @@ internal sealed class MainForm : Form
                     "https://ravkavonline.co.il/*",
                     CoreWebView2WebResourceContext.Document,
                     CoreWebView2WebResourceRequestSourceKinds.All);
+
+                // Block Google Pay endpoints for documents, scripts, frames and other
+                // network resources, not only top-level popups.
+                foreach (var pattern in new[]
+                {
+                    "https://pay.google.com/*", "https://*.pay.google.com/*",
+                    "https://payments.google.com/*", "https://*.payments.google.com/*",
+                    "https://wallet.google.com/*", "https://*.wallet.google.com/*"
+                })
+                    core.AddWebResourceRequestedFilter(
+                        pattern, CoreWebView2WebResourceContext.All,
+                        CoreWebView2WebResourceRequestSourceKinds.All);
+
                 core.WebResourceRequested += OnWebResourceRequested;
 
                 // Rav-Kav Online owns its complete multi-step workflow and reader bridge.
@@ -1033,6 +1054,9 @@ internal sealed class MainForm : Form
     private string _activeServiceProfile = "HopOn";
     private bool IsAllowedNavigationUri(Uri uri)
     {
+        // Google Pay is denied before administrator overrides or checkout exceptions.
+        if (IsGooglePayUri(uri)) return false;
+
         // During a user-initiated Rav-Kav/HopOn purchase flow, payment processors,
         // identity checks and 3-D Secure may use separate HTTPS hosts. Keep the
         // browser inside secure HTTPS and never permit insecure or credentialed URLs.
@@ -1043,7 +1067,7 @@ internal sealed class MainForm : Form
 
     private bool IsBlockedNavigationUri(Uri uri)
     {
-        if (!IsSecureWebNavigationUri(uri)) return true;
+        if (IsGooglePayUri(uri) || !IsSecureWebNavigationUri(uri)) return true;
 
         // The Rav-Kav flow is multi-domain and multi-stage. The built-in blacklist
         // must never interrupt card identification, contract selection, payment,
@@ -1544,6 +1568,15 @@ internal sealed class MainForm : Form
             return;
         }
 
+        if (IsGooglePayUri(target))
+        {
+            e.Cancel = true;
+            _status.Text = "Google Pay חסום בעמדה זו.";
+            AppDiagnostics.Write("Google Pay frame navigation blocked",
+                details: "Target: " + SafeOriginForLog(e.Uri));
+            return;
+        }
+
         // Rav-Kav Online starts its locally installed card-reader helper through a
         // custom URI scheme. Some site versions trigger that scheme from a hidden
         // iframe rather than the top-level document. Do not cancel it here: allow
@@ -1575,9 +1608,23 @@ internal sealed class MainForm : Form
 
     private void OnWebResourceRequested(object? sender, CoreWebView2WebResourceRequestedEventArgs e)
     {
-        if (!Uri.TryCreate(e.Request.Uri, UriKind.Absolute, out var target) ||
-            !IsAllowedNavigationUri(target) ||
-            !IsBlockedNavigationUri(target))
+        if (!Uri.TryCreate(e.Request.Uri, UriKind.Absolute, out var target))
+            return;
+
+        if (IsGooglePayUri(target))
+        {
+            e.Response = _browser.CoreWebView2.Environment.CreateWebResourceResponse(
+                new MemoryStream(Array.Empty<byte>()),
+                403,
+                "Google Pay blocked by kiosk policy",
+                "Content-Type: text/plain; charset=utf-8\r\nCache-Control: no-store");
+            _status.Text = "Google Pay חסום בעמדה זו.";
+            AppDiagnostics.Write("Google Pay network request blocked",
+                details: "Target: " + SafeOriginForLog(e.Request.Uri));
+            return;
+        }
+
+        if (!IsAllowedNavigationUri(target) || !IsBlockedNavigationUri(target))
             return;
 
         // A second network-level barrier: never pass a blocked HTML document to Chromium.
@@ -1634,6 +1681,15 @@ internal sealed class MainForm : Form
             return;
         }
 
+        if (IsGooglePayUri(e.Uri))
+        {
+            e.Cancel = true;
+            _status.Text = "Google Pay חסום בעמדה זו.";
+            AppDiagnostics.Write("Google Pay navigation blocked",
+                details: "Target: " + SafeOriginForLog(e.Uri));
+            return;
+        }
+
         if (!Uri.TryCreate(e.Uri, UriKind.Absolute, out var target) ||
             !IsAllowedNavigationUri(target) ||
             IsBlockedNavigationUri(target))
@@ -1644,9 +1700,12 @@ internal sealed class MainForm : Form
         }
     }
 
-    private static bool IsGooglePayUri(string? value)
+    private static bool IsGooglePayUri(string? value) =>
+        Uri.TryCreate(value, UriKind.Absolute, out var uri) && IsGooglePayUri(uri);
+
+    private static bool IsGooglePayUri(Uri? uri)
     {
-        if (!Uri.TryCreate(value, UriKind.Absolute, out var uri) ||
+        if (uri is null || !uri.IsAbsoluteUri ||
             !uri.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
             return false;
 
@@ -1702,6 +1761,36 @@ internal sealed class MainForm : Form
                 ?? throw new InvalidOperationException("WebView2 environment is not ready.");
             popup = new ServicePopupForm();
             await popup.InitializeAsync(environment);
+
+            foreach (var pattern in new[]
+            {
+                "https://pay.google.com/*", "https://*.pay.google.com/*",
+                "https://payments.google.com/*", "https://*.payments.google.com/*",
+                "https://wallet.google.com/*", "https://*.wallet.google.com/*"
+            })
+                popup.Core.AddWebResourceRequestedFilter(
+                    pattern, CoreWebView2WebResourceContext.All,
+                    CoreWebView2WebResourceRequestSourceKinds.All);
+
+            popup.Core.WebResourceRequested += (_, request) =>
+            {
+                if (!IsGooglePayUri(request.Request.Uri)) return;
+                request.Response = popup.Core.Environment.CreateWebResourceResponse(
+                    new MemoryStream(Array.Empty<byte>()), 403,
+                    "Google Pay blocked by kiosk policy",
+                    "Content-Type: text/plain; charset=utf-8\r\nCache-Control: no-store");
+                _status.Text = "Google Pay חסום בעמדה זו.";
+                AppDiagnostics.Write("Google Pay popup resource blocked",
+                    details: "Target: " + SafeOriginForLog(request.Request.Uri));
+            };
+            popup.Core.FrameNavigationStarting += (_, frame) =>
+            {
+                if (!IsGooglePayUri(frame.Uri)) return;
+                frame.Cancel = true;
+                _status.Text = "Google Pay חסום בעמדה זו.";
+                AppDiagnostics.Write("Google Pay popup frame blocked",
+                    details: "Target: " + SafeOriginForLog(frame.Uri));
+            };
 
             popup.Core.NavigationStarting += (_, navigation) =>
             {
