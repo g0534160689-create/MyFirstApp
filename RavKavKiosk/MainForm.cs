@@ -1530,6 +1530,8 @@ internal sealed class MainForm : Form
     }
 
     private static bool IsRavKavReaderProtocol(Uri uri) =>
+        // Rav-Kav uses ravkav:wss://proxy.ravkavonline.co.il/<session-id>
+        uri.Scheme.Equals("ravkav", StringComparison.OrdinalIgnoreCase) ||
         uri.Scheme.Equals("ravkavonline", StringComparison.OrdinalIgnoreCase) ||
         uri.Scheme.Equals("ravkavonline.exe", StringComparison.OrdinalIgnoreCase);
 
