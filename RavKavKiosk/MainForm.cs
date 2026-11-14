@@ -1215,7 +1215,7 @@ internal sealed class MainForm : Form
             const tag = el.tagName.toLowerCase();
             const href = el.closest("a[href]")?.href || "";
             const label = (el.getAttribute("aria-label") || el.getAttribute("title") || "").trim().slice(0,120);
-            const elementText = (el.innerText || el.textContent || "").trim().replace(/\\s+/g, " ").slice(0,240);
+            const elementText = (el.innerText || el.textContent || "").trim().replace(/\s+/g, " ").slice(0,240);
             if (previous) previous.style.outline = previous.__kioskOldOutline || "";
             document.removeEventListener("mousemove", move, true); document.removeEventListener("click", pick, true);
             window.__kioskPickerInstalled = false; document.body.style.cursor = "";
