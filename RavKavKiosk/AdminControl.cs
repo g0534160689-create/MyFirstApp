@@ -175,6 +175,8 @@ internal static class AdminPolicyStore
             throw new InvalidDataException("קובץ הגיבוי מכיל מספר חריג של כללים.");
         foreach (var route in policy.Routes)
         {
+            if (route.ActiveFrom.HasValue && route.ActiveUntil.HasValue && route.ActiveUntil.Value.Date < route.ActiveFrom.Value.Date)
+                throw new InvalidDataException("טווח תאריכים לא תקין בכלל נתיב.");
             if (string.IsNullOrWhiteSpace(route.Host) || Uri.CheckHostName(route.Host) == UriHostNameType.Unknown ||
                 string.IsNullOrWhiteSpace(route.Path) || !route.Path.StartsWith('/') || route.Path.Length > 2048 ||
                 route.Path.Any(char.IsControl))
@@ -184,10 +186,17 @@ internal static class AdminPolicyStore
             if (string.IsNullOrWhiteSpace(host) || Uri.CheckHostName(host) == UriHostNameType.Unknown)
                 throw new InvalidDataException("נמצא דומיין לא תקין בקובץ.");
         foreach (var element in policy.Elements)
+        {
+            if (element.ActiveFrom.HasValue && element.ActiveUntil.HasValue && element.ActiveUntil.Value.Date < element.ActiveFrom.Value.Date)
+                throw new InvalidDataException("טווח תאריכים לא תקין בכלל רכיב.");
             if (string.IsNullOrWhiteSpace(element.Host) || Uri.CheckHostName(element.Host) == UriHostNameType.Unknown ||
                 string.IsNullOrWhiteSpace(element.Selector) || element.Selector.Length > 2048 ||
                 element.Selector.Any(char.IsControl) || (element.ReplacementText?.Length ?? 0) > 1000)
                 throw new InvalidDataException("נמצא כלל רכיב לא תקין בקובץ.");
+        }
+        foreach (var host in policy.AllowedPopupHosts ?? [])
+            if (string.IsNullOrWhiteSpace(host) || Uri.CheckHostName(host) == UriHostNameType.Unknown)
+                throw new InvalidDataException("נמצא דומיין חלון מאובטח לא תקין בקובץ.");
 
         var imageFolder = Path.Combine(Folder, "ImportedImages");
         Directory.CreateDirectory(imageFolder);
@@ -675,6 +684,7 @@ internal sealed class AdminManagerForm : Form
             policy.Routes = imported.Routes;
             policy.Elements = imported.Elements;
             policy.AllowedHosts = imported.AllowedHosts;
+            policy.AllowedPopupHosts = imported.AllowedPopupHosts;
             policy.ThemeId = imported.ThemeId;
             policy.ShowRavKavPanel = imported.ShowRavKavPanel;
             policy.ShowHopOnPanel = imported.ShowHopOnPanel;
@@ -710,7 +720,7 @@ internal sealed class AdminManagerForm : Form
     private void ResetAllCustomRules()
     {
         if (MessageBox.Show(this, "לאפס את כל כללי הנתיבים, הרכיבים והדומיינים הידניים? הגדרות תצוגה, סיסמה והחסימות המובנות לא ישתנו.", "איפוס כללי מנהל", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
-        policy.Routes.Clear(); policy.Elements.Clear(); policy.AllowedHosts.Clear();
+        policy.Routes.Clear(); policy.Elements.Clear(); policy.AllowedHosts.Clear(); policy.AllowedPopupHosts.Clear();
         AdminPolicyStore.Save(policy); RefreshRules(); RulesChanged?.Invoke();
         selected.Text = "כל הכללים הידניים אופסו.";
     }
@@ -725,6 +735,11 @@ internal sealed class AdminManagerForm : Form
         var targets = selectedLinks.Length > 0
             ? selectedLinks.Select(link => link.Url).ToArray()
             : new[] { ruleInput.Text.Trim() };
+        if (routeFrom.Checked && routeUntil.Checked && routeUntil.Value.Date < routeFrom.Value.Date)
+        {
+            MessageBox.Show(this, "תאריך הסיום חייב להיות שווה לתאריך ההתחלה או מאוחר ממנו.");
+            return;
+        }
         var added = 0;
         foreach (var target in targets)
         {
@@ -852,6 +867,11 @@ internal sealed class AdminManagerForm : Form
         var host = selectedElementHost;
         if (selector.Length == 0 || string.IsNullOrWhiteSpace(host)) { MessageBox.Show(this, "בחר תחילה רכיב מתוך האתר באמצעות לחיצה שמאלית או בחר כלל רכיב מהרשימה."); return; }
         policy.Elements.RemoveAll(r => r.Host.Equals(host, StringComparison.OrdinalIgnoreCase) && r.Selector == selector);
+        if (elementFrom.Checked && elementUntil.Checked && elementUntil.Value.Date < elementFrom.Value.Date)
+        {
+            MessageBox.Show(this, "תאריך סיום החסימה חייב להיות שווה לתאריך ההתחלה או מאוחר ממנו.");
+            return;
+        }
         var imagePath = allowed ? "" : replacementImagePath.Trim();
         if (imagePath.Length > 0 && (!File.Exists(imagePath) || Path.GetExtension(imagePath).ToLowerInvariant() is not (".png" or ".jpg" or ".jpeg" or ".webp" or ".gif" or ".bmp"))) { MessageBox.Show(this, "בחר קובץ תמונה תקין מסוג PNG, JPG, WEBP, GIF או BMP."); return; }
         if (imagePath.Length > 0 && new FileInfo(imagePath).Length > 8 * 1024 * 1024) { MessageBox.Show(this, "גודל התמונה מוגבל ל־8MB."); return; }
