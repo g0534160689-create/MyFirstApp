@@ -20,6 +20,7 @@ internal sealed class MainForm : Form
     private string _activeStartUrl = "https://hopon.co.il/read";
     private string _activeServiceName = "HopOn";
     private readonly Button _back = new();
+    private readonly Button _previous = new();
     private AdminManagerForm? _adminManager;
     private bool _elementPicking;
     private readonly Dictionary<string, CoreWebView2Environment> _webViewEnvironments = new(StringComparer.OrdinalIgnoreCase);
@@ -82,6 +83,28 @@ internal sealed class MainForm : Form
         _back.BackColor = Navy;
         _back.Visible = false;
         _back.Click += (_, _) => ShowHome();
+
+        _previous.Text = "הקודם  ←";
+        _previous.Dock = DockStyle.Left;
+        _previous.Width = 112;
+        _previous.FlatStyle = FlatStyle.Flat;
+        _previous.FlatAppearance.BorderColor = Color.FromArgb(100, 150, 190);
+        _previous.FlatAppearance.BorderSize = 1;
+        _previous.FlatAppearance.MouseOverBackColor = Color.FromArgb(35, 62, 91);
+        _previous.FlatAppearance.MouseDownBackColor = Color.FromArgb(49, 79, 109);
+        _previous.Cursor = Cursors.Hand;
+        _previous.Font = new Font("Segoe UI", 9, FontStyle.Bold);
+        _previous.AccessibleName = "חזרה לעמוד הקודם";
+        _previous.ForeColor = Color.White;
+        _previous.BackColor = Navy;
+        _previous.Visible = false;
+        _previous.Enabled = false;
+        _previous.Click += (_, _) =>
+        {
+            if (_browser.CoreWebView2?.CanGoBack == true)
+                _browser.CoreWebView2.GoBack();
+        };
+
         header.Controls.Add(brand);
         // Invisible administrator hotspot in the upper-left corner: no button or visible hint.
         var adminHotspot = new Panel
@@ -109,6 +132,7 @@ internal sealed class MainForm : Form
         adminHotspot.BringToFront();
 
         header.Controls.Add(_back);
+        header.Controls.Add(_previous);
 
         var footer = new BufferedPanel { Dock = DockStyle.Bottom, Height = 34, BackColor = Color.FromArgb(10, 19, 33), Padding = new Padding(18, 0, 18, 0) };
         footer.Controls.Add(_status);
@@ -946,7 +970,7 @@ internal sealed class MainForm : Form
                 core.NavigationStarting += OnNavigationStarting;
                 core.WebMessageReceived += OnWebMessageReceived;
                 core.FrameNavigationStarting += OnFrameNavigationStarting;
-                core.HistoryChanged += (_, _) => EnforceCurrentPage();
+                core.HistoryChanged += (_, _) => { EnforceCurrentPage(); UpdatePreviousButton(); };
                 core.NewWindowRequested += OnNewWindowRequested;
 
                 core.AddWebResourceRequestedFilter(
@@ -1026,6 +1050,7 @@ internal sealed class MainForm : Form
                 core.SourceChanged += (_, _) =>
                 {
                     EnforceCurrentPage();
+                    UpdatePreviousButton();
                     if (_browser.CoreWebView2 is not null &&
                         Uri.TryCreate(_browser.CoreWebView2.Source, UriKind.Absolute, out var current) &&
                         IsAllowedNavigationUri(current) &&
@@ -1034,6 +1059,7 @@ internal sealed class MainForm : Form
                 };
                 core.NavigationCompleted += (_, args) =>
                 {
+                    UpdatePreviousButton();
                     if (!args.IsSuccess)
                     {
                         var error = new InvalidOperationException(
@@ -1069,6 +1095,7 @@ internal sealed class MainForm : Form
                 throw new InvalidOperationException("כתובת השירות אינה מאושרת בהגדרות.");
 
             _browser.CoreWebView2.Navigate(start.ToString());
+            UpdatePreviousButton();
         }
         catch (Exception ex)
         {
@@ -1803,11 +1830,19 @@ internal sealed class MainForm : Form
             "Content-Type: text/plain; charset=utf-8\r\nCache-Control: no-store");
     }
 
+    private void UpdatePreviousButton()
+    {
+        _previous.Visible = _browser.Visible;
+        _previous.Enabled = _browser.Visible && _browser.CoreWebView2?.CanGoBack == true;
+    }
+
     private void ShowHome()
     {
         _browser.Visible = false;
         _home.Visible = true;
         _back.Visible = false;
+        _previous.Visible = false;
+        _previous.Enabled = false;
         _status.Text = "מוכן לטעינה";
     }
 
