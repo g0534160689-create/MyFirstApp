@@ -1206,7 +1206,7 @@ internal sealed class MainForm : Form
             (() => {
               if (window.__ravKavNoCardSaveGuardInstalled) return;
               window.__ravKavNoCardSaveGuardInstalled = true;
-              const saveText = /(?:save|remember|store|keep)\\s+(?:this\\s+)?(?:credit\\s+)?card|(?:שמור|שמירת|לשמור|זכור|זכירת).{0,35}(?:כרטיס|אשראי)|(?:כרטיס|אשראי).{0,35}(?:לשמירה|לשמור|לזכור|הבא)/i;
+              const saveText = /(?:save|remember|store|keep)\s+(?:this\s+)?(?:credit\s+)?card|(?:שמור|שמירת|לשמור|זכור|זכירת).{0,35}(?:כרטיס|אשראי)|(?:כרטיס|אשראי).{0,35}(?:לשמירה|לשמור|לזכור|הבא)/i;
               const cardField = el => /cc-|card|credit/i.test([
                 el.name, el.id, el.autocomplete, el.getAttribute('aria-label'),
                 el.placeholder
