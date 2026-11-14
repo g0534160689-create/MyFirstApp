@@ -393,6 +393,7 @@ internal sealed class AdminManagerForm : Form
     private string selectedElementHref = "";
     public event Action? PickElementRequested;
     public event Action? ScanLinksRequested;
+    public event Action? ScanPopupDomainsRequested;
     public event Action? BlockedElementsRefreshRequested;
     public event Action? RulesChanged;
     public event Action<bool>? AdminModeChanged;
@@ -512,6 +513,9 @@ internal sealed class AdminManagerForm : Form
         var addPopupHost = new Button { Text = "אפשר חלון זה בלבד", Width = 145 };
         addPopupHost.Click += (_, _) => AddPopupHost();
         host.Controls.Add(addPopupHost);
+        var scanPopupDomains = new Button { Text = "זהה דומיינים והוסף לרשימה הלבנה", Width = 245 };
+        scanPopupDomains.Click += (_, _) => ScanPopupDomainsRequested?.Invoke();
+        host.Controls.Add(scanPopupDomains);
         root.Controls.Add(host, 0, 3);
         root.Controls.Add(rules, 0, 4);
         var selectionBar = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft, WrapContents = false };
@@ -810,6 +814,42 @@ internal sealed class AdminManagerForm : Form
         scannedLinks.AddRange(links.Take(300));
         RefreshRules();
         selected.Text = $"נסרקו {scannedLinks.Count} קישורים בעמוד. בחר קישור מהרשימה כדי לטעון אותו לשדה הנתיב, ואז לחץ אפשר או חסום.";
+        Show(); Activate();
+    }
+    public void ReceiveScannedPopupDomains(IEnumerable<string> domains)
+    {
+        var found = domains
+            .Where(host => !string.IsNullOrWhiteSpace(host))
+            .Select(host => host.Trim().TrimEnd('.').ToLowerInvariant())
+            .Where(host => !host.Contains('/') && !host.Contains(':') && Uri.CheckHostName(host) != UriHostNameType.Unknown)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(host => host, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        if (found.Length == 0)
+        {
+            selected.Text = "לא נמצאו דומיינים של HTTPS בעמוד הנוכחי.";
+            Show(); Activate();
+            return;
+        }
+
+        var alreadyAllowed = found.Where(host => policy.AllowedPopupHosts.Contains(host, StringComparer.OrdinalIgnoreCase)).ToArray();
+        var toAdd = found.Except(alreadyAllowed, StringComparer.OrdinalIgnoreCase).ToArray();
+        var preview = string.Join(Environment.NewLine, found.Take(18));
+        if (found.Length > 18) preview += Environment.NewLine + $"... ועוד {found.Length - 18} דומיינים";
+        var prompt = $"נמצאו {found.Length} דומיינים ייחודיים בעמוד. {alreadyAllowed.Length} כבר ברשימה הלבנה ו-{toAdd.Length} חדשים.\\r\\n\\r\\n" +
+                     preview + "\\r\\n\\r\\nלהוסיף את הדומיינים החדשים לרשימת החלונות המאובטחים המורשים?";
+        if (toAdd.Length == 0 || MessageBox.Show(this, prompt, "זיהוי דומיינים לחלונות מאובטחים", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
+        {
+            selected.Text = $"הסריקה הסתיימה: {found.Length} דומיינים נמצאו, לא נוספו שינויים.";
+            Show(); Activate();
+            return;
+        }
+
+        policy.AllowedPopupHosts.AddRange(toAdd);
+        AdminPolicyStore.Save(policy);
+        RefreshRules();
+        selected.Text = $"נוספו {toAdd.Length} דומיינים לרשימת החלונות המאובטחים. דומיינים אלה עדיין כפופים לחסימת Google Pay.";
         Show(); Activate();
     }
     public void ReceiveBlockedElementReport(IEnumerable<(string Selector, string Tag, string Text, int Count)> items)
