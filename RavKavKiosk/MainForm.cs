@@ -980,9 +980,40 @@ internal sealed class MainForm : Form
                 // Do not inject kiosk route wrappers into this site: even a harmless
                 // history/link hook can interfere with its reader bootstrap and SPA flow.
                 if (profileKey == "HopOn")
+                {
                     await core.AddScriptToExecuteOnDocumentCreatedAsync(BuildRouteGuardScript(_settings.StartUrl));
+                }
                 else
-                    await core.AddScriptToExecuteOnDocumentCreatedAsync(BuildRavKavNoCardSaveScript());
+                {
+                    var noCardSaveScript = BuildRavKavNoCardSaveScript();
+                    await core.AddScriptToExecuteOnDocumentCreatedAsync(noCardSaveScript);
+
+                    // Hosted checkout renders the reusable-card checkbox inside a
+                    // cross-origin payment iframe. Re-apply the guard whenever a frame
+                    // is created and whenever its document finishes loading.
+                    core.FrameCreated += (_, frameArgs) =>
+                    {
+                        var paymentFrame = frameArgs.Frame;
+                        paymentFrame.DOMContentLoaded += async (_, _) =>
+                        {
+                            try
+                            {
+                                await paymentFrame.ExecuteScriptAsync(noCardSaveScript);
+                            }
+                            catch (Exception ex)
+                            {
+                                AppDiagnostics.Write("Rav-Kav payment frame guard", ex);
+                            }
+                        };
+                        _ = paymentFrame.ExecuteScriptAsync(noCardSaveScript).ContinueWith(
+                            task =>
+                            {
+                                if (task.IsFaulted && task.Exception is not null)
+                                    AppDiagnostics.Write("Rav-Kav payment frame guard", task.Exception.GetBaseException());
+                            },
+                            TaskScheduler.Default);
+                    };
+                }
                 core.DownloadStarting += (_, args) => args.Cancel = true;
                 core.LaunchingExternalUriScheme += OnLaunchingExternalUriScheme;
                 core.PermissionRequested += (_, args) =>
@@ -1199,65 +1230,92 @@ internal sealed class MainForm : Form
 
     private static string BuildRavKavNoCardSaveScript()
     {
-        // Runs in the main page and child frames. The payment provider's reusable-card
-        // control is explicitly identified by reusableId; text matching is a fallback.
+        // This script is injected into the top-level page and each hosted payment frame.
+        // It targets the provider's stable reusableId rather than relying on translated text.
         return """
             (() => {
               if (window.__ravKavNoCardSaveGuardInstalled) return;
               window.__ravKavNoCardSaveGuardInstalled = true;
-              const saveText = /(?:save|remember|store|keep)\s+(?:this\s+)?(?:credit\s+)?card|(?:שמור|שמירת|לשמור|זכור|זכירת).{0,35}(?:כרטיס|אשראי|לשימוש(?:\s+חוזר)?|לשמור\s+לשימוש)|(?:כרטיס|אשראי).{0,35}(?:לשמירה|לשמור|לזכור|הבא)/i;
-              const hideControl = el => {
+              const selectors = [
+                '#reusableId',
+                'input[type="checkbox"][id="reusableId"]',
+                'label[for="reusableId"]',
+                'div.checkbox.m-top'
+              ];
+              const hide = el => {
                 if (!el) return;
-                if ('checked' in el) el.checked = false;
-                if ('disabled' in el) el.disabled = true;
-                el.setAttribute('aria-hidden', 'true');
                 el.style.setProperty('display', 'none', 'important');
-                const label = el.labels && el.labels[0];
-                if (label) label.style.setProperty('display', 'none', 'important');
-                const wrapper = el.closest('.checkbox, .form-check, [class*="checkbox"], [class*="reusable"]');
-                if (wrapper) wrapper.style.setProperty('display', 'none', 'important');
-                else if (el.parentElement) el.parentElement.style.setProperty('display', 'none', 'important');
+                el.style.setProperty('visibility', 'hidden', 'important');
+                el.style.setProperty('pointer-events', 'none', 'important');
+                el.setAttribute('aria-hidden', 'true');
               };
-              const nearbyText = el => {
-                const parts = [];
-                if (el.labels) for (const label of el.labels)
-                  parts.push(label.innerText || label.textContent || '');
-                let p = el.parentElement;
-                for (let i = 0; p && i < 4; i++, p = p.parentElement)
-                  parts.push((p.innerText || p.textContent || '').slice(0, 700));
-                return parts.join(' ');
+              const blockReusableCard = () => {
+                // Exact elements from the inspected payment DOM.
+                const input = document.querySelector('#reusableId');
+                const label = document.querySelector('label[for="reusableId"]');
+                const wrapper = input?.closest('div.checkbox.m-top') ||
+                                label?.closest('div.checkbox.m-top') ||
+                                label?.parentElement;
+                if (input) {
+                  input.checked = false;
+                  input.defaultChecked = false;
+                  input.removeAttribute('checked');
+                  input.disabled = true;
+                  input.setAttribute('aria-checked', 'false');
+                  input.setAttribute('autocomplete', 'off');
+                  hide(input);
+                }
+                hide(label);
+                hide(wrapper);
+
+                // Fallback for a provider that changes only the visible label.
+                const textPattern = /שמור\s+לשימוש\s+חוזר|save\s+(?:this\s+)?card|remember\s+card/i;
+                for (const candidate of document.querySelectorAll('label, .checkbox, [class*="checkbox"]')) {
+                  if (textPattern.test(candidate.innerText || candidate.textContent || '')) {
+                    const associated = candidate.querySelector('input[type="checkbox"]') ||
+                      (candidate.htmlFor ? document.getElementById(candidate.htmlFor) : null);
+                    if (associated) {
+                      associated.checked = false;
+                      associated.defaultChecked = false;
+                      associated.removeAttribute('checked');
+                      associated.disabled = true;
+                    }
+                    hide(candidate);
+                  }
+                }
               };
               const enforce = () => {
-                // Exact selector observed in the provider checkout DOM.
-                for (const el of document.querySelectorAll('#reusableId, input[id*="reusable" i], input[name*="reusable" i]'))
-                  hideControl(el);
-                for (const el of document.querySelectorAll('input, select, textarea')) {
-                  if (/cc-|card|credit/i.test([
-                    el.name, el.id, el.autocomplete, el.getAttribute('aria-label'), el.placeholder
-                  ].filter(Boolean).join(' ')))
-                    el.setAttribute('autocomplete', 'off');
-                  if (el.type === 'checkbox' && saveText.test(nearbyText(el)))
-                    hideControl(el);
-                }
+                try { blockReusableCard(); } catch { /* payment DOM may be mid-render */ }
               };
               enforce();
-              new MutationObserver(enforce).observe(document.documentElement, {
-                childList: true, subtree: true, attributes: true,
-                attributeFilter: ['checked', 'type', 'name', 'id', 'autocomplete']
-              });
-              document.addEventListener('click', event => {
-                const el = event.target && event.target.closest &&
-                  event.target.closest('input[type="checkbox"]');
-                if (el && (el.id === 'reusableId' || saveText.test(nearbyText(el)))) {
-                  hideControl(el);
+              const observer = new MutationObserver(enforce);
+              const startObserver = () => {
+                if (document.documentElement)
+                  observer.observe(document.documentElement, {
+                    childList: true, subtree: true, attributes: true,
+                    attributeFilter: ['checked', 'disabled', 'id', 'for', 'class', 'style']
+                  });
+                enforce();
+              };
+              if (document.documentElement) startObserver();
+              else document.addEventListener('DOMContentLoaded', startObserver, { once: true });
+
+              // Prevent mouse, keyboard, and scripted form interaction from opting in.
+              const stopOptIn = event => {
+                const target = event.target;
+                if (!target) return;
+                const label = target.closest?.('label[for="reusableId"], #reusableId, div.checkbox.m-top');
+                if (label) {
                   event.preventDefault();
                   event.stopImmediatePropagation();
+                  event.stopPropagation();
+                  enforce();
                 }
-              }, true);
-              document.addEventListener('submit', () => {
-                for (const el of document.querySelectorAll('input[type="checkbox"]'))
-                  if (el.id === 'reusableId' || saveText.test(nearbyText(el))) hideControl(el);
-              }, true);
+              };
+              for (const type of ['click', 'change', 'input', 'keydown'])
+                document.addEventListener(type, stopOptIn, true);
+              document.addEventListener('submit', enforce, true);
+              window.setInterval(enforce, 500);
             })();
             """;
     }
