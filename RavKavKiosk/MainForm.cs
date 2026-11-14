@@ -1855,16 +1855,12 @@ internal sealed class MainForm : Form
             return;
         }
 
-        var isBlankBootstrap = Uri.TryCreate(e.Uri, UriKind.Absolute, out target) &&
-            target.Equals(new Uri("about:blank")) && e.IsUserInitiated;
-
-        // Secure popups are denied by default. Only exact HTTPS hosts explicitly
-        // approved in Admin > Secure windows may open. Redirects are checked again.
-        if (!isBlankBootstrap &&
-            (!Uri.TryCreate(e.Uri, UriKind.Absolute, out target) ||
-             !target.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase) ||
-             IsGooglePayUri(target) ||
-             !AdminPolicyStore.IsPopupHostAllowed(target.IdnHost)))
+        // Secure popups are denied by default, including about:blank bootstraps.
+        // Only exact HTTPS hosts explicitly approved in Admin > Secure windows may open.
+        if (!Uri.TryCreate(e.Uri, UriKind.Absolute, out target) ||
+            !target.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase) ||
+            IsGooglePayUri(target) ||
+            !AdminPolicyStore.IsPopupHostAllowed(target.IdnHost))
         {
             e.Handled = true;
             _status.Text = "החלון המאובטח נחסם. אפשר לאשר דומיין מסוים באזור הניהול.";
