@@ -1841,15 +1841,14 @@ internal sealed class MainForm : Form
         if (IsGooglePayUri(e.Uri))
         {
             e.Handled = true;
-            _status.Text = "חלון Google Pay נחסם בהתאם להגדרות המערכת.";
-            AppDiagnostics.Write("Google Pay popup blocked",
-                details: "Target: " + SafeOriginForLog(e.Uri));
+            _status.Text = "חלון Google Pay חסום בעמדה זו.";
+            AppDiagnostics.Write("Google Pay popup blocked", details: "Target: " + SafeOriginForLog(e.Uri));
             return;
         }
 
         if (Uri.TryCreate(e.Uri, UriKind.Absolute, out var target) && IsRavKavReaderProtocol(target))
         {
-            // Custom reader URI is handled by LaunchingExternalUriScheme, not an HTTPS popup.
+            // Keep the separately approved local card-reader protocol flow.
             e.Handled = false;
             AppDiagnostics.Write("Reader protocol popup forwarded",
                 details: "Scheme: " + target.Scheme + "; top-level: " + SafeOriginForLog(_browser.CoreWebView2?.Source ?? ""));
@@ -1858,19 +1857,21 @@ internal sealed class MainForm : Form
 
         var isBlankBootstrap = Uri.TryCreate(e.Uri, UriKind.Absolute, out target) &&
             target.Equals(new Uri("about:blank")) && e.IsUserInitiated;
+
+        // Secure popups are denied by default. Only exact HTTPS hosts explicitly
+        // approved in Admin > Secure windows may open. Redirects are checked again.
         if (!isBlankBootstrap &&
             (!Uri.TryCreate(e.Uri, UriKind.Absolute, out target) ||
-             !IsAllowedNavigationUri(target) || IsBlockedNavigationUri(target) ||
-             !target.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)))
+             !target.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase) ||
+             IsGooglePayUri(target) ||
+             !AdminPolicyStore.IsPopupHostAllowed(target.IdnHost)))
         {
             e.Handled = true;
-            _status.Text = "חלון קופץ נחסם: הכתובת אינה מאובטחת או אינה מאושרת.";
-            AppDiagnostics.Write("Popup blocked", details: "Invalid or blocked popup URI");
+            _status.Text = "החלון המאובטח נחסם. אפשר לאשר דומיין מסוים באזור הניהול.";
+            AppDiagnostics.Write("Secure popup denied by default", details: "Target: " + SafeOriginForLog(e.Uri));
             return;
         }
 
-        // Create a real in-app WebView2 popup using the exact same environment/profile.
-        // This preserves window.opener/postMessage for authentication and reader flows.
         var deferral = e.GetDeferral();
         ServicePopupForm? popup = null;
         try
@@ -1886,49 +1887,36 @@ internal sealed class MainForm : Form
                 "https://payments.google.com/*", "https://*.payments.google.com/*",
                 "https://wallet.google.com/*", "https://*.wallet.google.com/*"
             })
-                popup.Core.AddWebResourceRequestedFilter(
-                    pattern, CoreWebView2WebResourceContext.All,
-                    CoreWebView2WebResourceRequestSourceKinds.All);
+                popup.Core.AddWebResourceRequestedFilter(pattern,
+                    CoreWebView2WebResourceContext.All, CoreWebView2WebResourceRequestSourceKinds.All);
 
             popup.Core.WebResourceRequested += (_, request) =>
             {
                 if (!IsGooglePayUri(request.Request.Uri)) return;
                 request.Response = popup.Core.Environment.CreateWebResourceResponse(
-                    new MemoryStream(Array.Empty<byte>()), 403,
-                    "Google Pay blocked by kiosk policy",
+                    new MemoryStream(Array.Empty<byte>()), 403, "Google Pay blocked by kiosk policy",
                     "Content-Type: text/plain; charset=utf-8\r\nCache-Control: no-store");
-                _status.Text = "Google Pay חסום בעמדה זו.";
-                AppDiagnostics.Write("Google Pay popup resource blocked",
-                    details: "Target: " + SafeOriginForLog(request.Request.Uri));
             };
-            popup.Core.FrameNavigationStarting += (_, frame) =>
-            {
-                if (!IsGooglePayUri(frame.Uri)) return;
-                frame.Cancel = true;
-                _status.Text = "Google Pay חסום בעמדה זו.";
-                AppDiagnostics.Write("Google Pay popup frame blocked",
-                    details: "Target: " + SafeOriginForLog(frame.Uri));
-            };
-
             popup.Core.NavigationStarting += (_, navigation) =>
             {
                 if (Uri.TryCreate(navigation.Uri, UriKind.Absolute, out var next) &&
                     next.Equals(new Uri("about:blank")))
                     return;
-                if (IsGooglePayUri(navigation.Uri))
-                {
-                    navigation.Cancel = true;
-                    _status.Text = "חלון Google Pay נחסם בהתאם להגדרות המערכת.";
-                    AppDiagnostics.Write("Google Pay popup redirect blocked",
-                        details: "Target: " + SafeOriginForLog(navigation.Uri));
-                    return;
-                }
                 if (!Uri.TryCreate(navigation.Uri, UriKind.Absolute, out next) ||
-                    !IsAllowedNavigationUri(next) || IsBlockedNavigationUri(next) ||
-                    !next.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
+                    !next.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase) ||
+                    IsGooglePayUri(next) ||
+                    !AdminPolicyStore.IsPopupHostAllowed(next.IdnHost))
                 {
                     navigation.Cancel = true;
-                    AppDiagnostics.Write("Popup navigation blocked", details: "Unsafe popup redirect");
+                    AppDiagnostics.Write("Popup redirect denied", details: "Target: " + SafeOriginForLog(navigation.Uri));
+                }
+            };
+            popup.Core.FrameNavigationStarting += (_, frame) =>
+            {
+                if (IsGooglePayUri(frame.Uri))
+                {
+                    frame.Cancel = true;
+                    AppDiagnostics.Write("Google Pay popup frame blocked", details: SafeOriginForLog(frame.Uri));
                 }
             };
 
@@ -1936,16 +1924,15 @@ internal sealed class MainForm : Form
             e.Handled = false;
             popup.FormClosed += (_, _) => popup.Dispose();
             popup.Show(this);
-            _status.Text = "נפתח חלון מאובטח לאישור/השלמת הפעולה...";
-            AppDiagnostics.Write("Secure in-app popup opened",
-                details: SafeOriginForLog(target.GetLeftPart(UriPartial.Authority)) +
-                         "; user initiated: " + e.IsUserInitiated);
+            _status.Text = "נפתח חלון מאובטח שאושר באזור הניהול.";
+            AppDiagnostics.Write("Approved secure popup opened",
+                details: SafeOriginForLog(target?.GetLeftPart(UriPartial.Authority) ?? "about:blank"));
         }
         catch (Exception ex)
         {
             popup?.Dispose();
             e.Handled = true;
-            _status.Text = "לא ניתן לפתוח חלון קופץ מאובטח.";
+            _status.Text = "לא ניתן לפתוח את החלון המאובטח.";
             AppDiagnostics.Write("Secure popup creation failed", ex);
         }
         finally
