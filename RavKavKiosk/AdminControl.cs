@@ -337,6 +337,7 @@ internal sealed class AdminManagerForm : Form
 {
     private readonly AdminPolicy policy = AdminPolicyStore.Load();
     private readonly TextBox ruleInput = new() { Width = 330 };
+    private readonly TextBox manualSelectorInput = new() { Width = 230, PlaceholderText = "לדוגמה: #elementId או .class" };
     private readonly TextBox hostInput = new() { Width = 190 };
     private readonly ListBox rules = new() { Dock = DockStyle.Fill, HorizontalScrollbar = true, SelectionMode = SelectionMode.MultiExtended };
     private readonly List<(string Url, string Text, bool Blocked)> scannedLinks = [];
@@ -523,6 +524,11 @@ internal sealed class AdminManagerForm : Form
 
         var actions = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft, WrapContents = true, AutoScroll = true };
         var pick = new Button { Text = "בחירת רכיב בלחיצה שמאלית", Width = 190 }; pick.Click += (_, _) => { Hide(); PickElementRequested?.Invoke(); };
+        var addBySelector = new Button { Text = "חסום לפי מזהה / כתובת רכיב", Width = 190 };
+        addBySelector.Click += (_, _) => AddElementByPastedSelector();
+        actions.Controls.Add(new Label { Text = "הדבק מזהה / CSS:", AutoSize = true, Padding = new Padding(4, 8, 0, 0) });
+        actions.Controls.Add(manualSelectorInput);
+        actions.Controls.Add(addBySelector);
         var blockElement = new Button { Text = "הסתר רכיב שנבחר", Width = 140 }; blockElement.Click += (_, _) => SaveSelectedElement(false);
         var allowElement = new Button { Text = "הצג רכיב שנבחר", Width = 140 }; allowElement.Click += (_, _) => SaveSelectedElement(true);
         var remove = new Button { Text = "מחק כלל מסומן", Width = 120 }; remove.Click += (_, _) => RemoveSelected();
@@ -740,6 +746,53 @@ internal sealed class AdminManagerForm : Form
             : $"נמצאו {total} מופעים מוסתרים בפועל בעמוד. הרשימה מוצגת בתחתית.";
         Show(); Activate();
     }
+    private void AddElementByPastedSelector()
+    {
+        var selector = manualSelectorInput.Text.Trim();
+        if (selector.Length == 0)
+        {
+            MessageBox.Show(this, "הדבק מזהה או CSS Selector של הרכיב שברצונך לחסום.");
+            manualSelectorInput.Focus();
+            return;
+        }
+        if (selector.Length > 2048 || selector.Any(char.IsControl))
+        {
+            MessageBox.Show(this, "הסלקטור ארוך מדי או מכיל תווים שאינם מותרים.");
+            return;
+        }
+        if (!Uri.TryCreate(currentUrl, UriKind.Absolute, out var pageUri) ||
+            pageUri.Scheme != Uri.UriSchemeHttps)
+        {
+            MessageBox.Show(this, "לא ניתן לזהות אתר HTTPS פעיל. פתח תחילה את האתר שבו נמצא הרכיב.");
+            return;
+        }
+
+        // Accept a pasted element URL by converting its fragment into an ID selector.
+        if (Uri.TryCreate(selector, UriKind.Absolute, out var elementUri))
+        {
+            if (!elementUri.Host.Equals(pageUri.Host, StringComparison.OrdinalIgnoreCase) ||
+                string.IsNullOrWhiteSpace(elementUri.Fragment) || elementUri.Fragment.Length < 2)
+            {
+                MessageBox.Show(this, "כתובת רכיב חייבת להיות מאותו אתר ולכלול #מזהה בסוף הכתובת.");
+                return;
+            }
+            selector = "#" + System.Net.WebUtility.UrlDecode(elementUri.Fragment[1..]);
+        }
+        else if (selector.StartsWith("#", StringComparison.Ordinal) && selector.Length > 1)
+        {
+            // A plain #id is the quickest pasted form.
+        }
+        else if (selector.StartsWith("id=", StringComparison.OrdinalIgnoreCase))
+        {
+            selector = "#" + selector[3..].Trim();
+        }
+
+        selectedElementHost = pageUri.Host;
+        selected.Text = $"רכיב שנבחר (CSS): {selector}";
+        SaveSelectedElement(false);
+        manualSelectorInput.Clear();
+    }
+
     private void SaveSelectedElement(bool allowed, string replacementText = "", string replacementImagePath = "")
     {
         var marker = ": ";
