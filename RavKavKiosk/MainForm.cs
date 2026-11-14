@@ -1199,44 +1199,45 @@ internal sealed class MainForm : Form
 
     private static string BuildRavKavNoCardSaveScript()
     {
-        // Runs at document creation in the main page and embedded frames. It disables
-        // browser autofill and suppresses only explicit "save/remember card" controls;
-        // payment fields and the payment submission flow remain available.
+        // Runs in the main page and child frames. The payment provider's reusable-card
+        // control is explicitly identified by reusableId; text matching is a fallback.
         return """
             (() => {
               if (window.__ravKavNoCardSaveGuardInstalled) return;
               window.__ravKavNoCardSaveGuardInstalled = true;
               const saveText = /(?:save|remember|store|keep)\s+(?:this\s+)?(?:credit\s+)?card|(?:שמור|שמירת|לשמור|זכור|זכירת).{0,35}(?:כרטיס|אשראי|לשימוש(?:\s+חוזר)?|לשמור\s+לשימוש)|(?:כרטיס|אשראי).{0,35}(?:לשמירה|לשמור|לזכור|הבא)/i;
-              const cardField = el => /cc-|card|credit/i.test([
-                el.name, el.id, el.autocomplete, el.getAttribute('aria-label'),
-                el.placeholder
-              ].filter(Boolean).join(' '));
+              const hideControl = el => {
+                if (!el) return;
+                if ('checked' in el) el.checked = false;
+                if ('disabled' in el) el.disabled = true;
+                el.setAttribute('aria-hidden', 'true');
+                el.style.setProperty('display', 'none', 'important');
+                const label = el.labels && el.labels[0];
+                if (label) label.style.setProperty('display', 'none', 'important');
+                const wrapper = el.closest('.checkbox, .form-check, [class*="checkbox"], [class*="reusable"]');
+                if (wrapper) wrapper.style.setProperty('display', 'none', 'important');
+                else if (el.parentElement) el.parentElement.style.setProperty('display', 'none', 'important');
+              };
               const nearbyText = el => {
                 const parts = [];
-                if (el.labels) for (const label of el.labels) parts.push(label.innerText || label.textContent || '');
+                if (el.labels) for (const label of el.labels)
+                  parts.push(label.innerText || label.textContent || '');
                 let p = el.parentElement;
-                for (let i = 0; p && i < 3; i++, p = p.parentElement)
-                  parts.push((p.innerText || p.textContent || '').slice(0, 500));
+                for (let i = 0; p && i < 4; i++, p = p.parentElement)
+                  parts.push((p.innerText || p.textContent || '').slice(0, 700));
                 return parts.join(' ');
               };
               const enforce = () => {
+                // Exact selector observed in the provider checkout DOM.
+                for (const el of document.querySelectorAll('#reusableId, input[id*="reusable" i], input[name*="reusable" i]'))
+                  hideControl(el);
                 for (const el of document.querySelectorAll('input, select, textarea')) {
-                  if (cardField(el)) {
+                  if (/cc-|card|credit/i.test([
+                    el.name, el.id, el.autocomplete, el.getAttribute('aria-label'), el.placeholder
+                  ].filter(Boolean).join(' ')))
                     el.setAttribute('autocomplete', 'off');
-                    if (el.type === 'checkbox' && saveText.test(nearbyText(el))) {
-                      el.checked = false;
-                      el.disabled = true;
-                      el.setAttribute('aria-hidden', 'true');
-                      const label = el.labels && el.labels[0];
-                      if (label) label.style.display = 'none';
-                    }
-                  }
-                  if (el.type === 'checkbox' && saveText.test(nearbyText(el))) {
-                    el.checked = false;
-                    el.disabled = true;
-                    const label = el.labels && el.labels[0];
-                    if (label) label.style.display = 'none';
-                  }
+                  if (el.type === 'checkbox' && saveText.test(nearbyText(el)))
+                    hideControl(el);
                 }
               };
               enforce();
@@ -1245,17 +1246,17 @@ internal sealed class MainForm : Form
                 attributeFilter: ['checked', 'type', 'name', 'id', 'autocomplete']
               });
               document.addEventListener('click', event => {
-                const el = event.target && event.target.closest && event.target.closest('input[type="checkbox"]');
-                if (el && saveText.test(nearbyText(el))) {
-                  el.checked = false;
-                  el.disabled = true;
+                const el = event.target && event.target.closest &&
+                  event.target.closest('input[type="checkbox"]');
+                if (el && (el.id === 'reusableId' || saveText.test(nearbyText(el)))) {
+                  hideControl(el);
                   event.preventDefault();
                   event.stopImmediatePropagation();
                 }
               }, true);
               document.addEventListener('submit', () => {
                 for (const el of document.querySelectorAll('input[type="checkbox"]'))
-                  if (saveText.test(nearbyText(el))) el.checked = false;
+                  if (el.id === 'reusableId' || saveText.test(nearbyText(el))) hideControl(el);
               }, true);
             })();
             """;
