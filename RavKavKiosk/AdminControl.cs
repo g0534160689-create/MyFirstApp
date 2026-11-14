@@ -31,6 +31,10 @@ internal sealed class ElementPolicyRule
     public ElementPolicyRule(string host, string selector, bool allowed) { Host = host; Selector = selector; Allowed = allowed; }
     public string Host { get; set; } = "";
     public string Selector { get; set; } = "";
+    public string TagName { get; set; } = "";
+    public string ElementLabel { get; set; } = "";
+    public string ElementText { get; set; } = "";
+    public string ElementHref { get; set; } = "";
     public bool Allowed { get; set; }
     public DateTime? ActiveFrom { get; set; }
     public DateTime? ActiveUntil { get; set; }
@@ -382,6 +386,10 @@ internal sealed class AdminManagerForm : Form
     private readonly Label selected = new() { AutoSize = false, Height = 58, Dock = DockStyle.Top, TextAlign = ContentAlignment.MiddleRight };
     private readonly string currentUrl;
     private string selectedElementHost = "";
+    private string selectedElementTag = "";
+    private string selectedElementLabel = "";
+    private string selectedElementText = "";
+    private string selectedElementHref = "";
     public event Action? PickElementRequested;
     public event Action? ScanLinksRequested;
     public event Action? BlockedElementsRefreshRequested;
@@ -783,6 +791,10 @@ internal sealed class AdminManagerForm : Form
     public void ReceivePickedSelector(string selector, string tag = "", string href = "", string label = "", string host = "")
     {
         selectedElementHost = string.IsNullOrWhiteSpace(host) && Uri.TryCreate(currentUrl, UriKind.Absolute, out var pageUri) ? pageUri.Host : host;
+        selectedElementTag = tag ?? "";
+        selectedElementLabel = label ?? "";
+        selectedElementText = "";
+        selectedElementHref = href ?? "";
         var details = string.IsNullOrWhiteSpace(href) ? "" : " | קישור: " + href;
         var caption = string.IsNullOrWhiteSpace(label) ? "" : " | " + label;
         selected.Text = $"רכיב שנבחר ({tag}){caption}{details}: {selector}";
@@ -854,6 +866,7 @@ internal sealed class AdminManagerForm : Form
         }
 
         selectedElementHost = pageUri.Host;
+        selectedElementTag = "CSS"; selectedElementLabel = ""; selectedElementText = ""; selectedElementHref = "";
         selected.Text = $"רכיב שנבחר (CSS): {selector}";
         SaveSelectedElement(false);
         manualSelectorInput.Clear();
@@ -877,6 +890,10 @@ internal sealed class AdminManagerForm : Form
         if (imagePath.Length > 0 && new FileInfo(imagePath).Length > 8 * 1024 * 1024) { MessageBox.Show(this, "גודל התמונה מוגבל ל־8MB."); return; }
         var rule = new ElementPolicyRule(host, selector, allowed)
         {
+            TagName = selectedElementTag,
+            ElementLabel = selectedElementLabel,
+            ElementText = selectedElementText,
+            ElementHref = selectedElementHref,
             ActiveFrom = elementFrom.Checked ? elementFrom.Value.Date : null,
             ActiveUntil = elementUntil.Checked ? elementUntil.Value.Date : null,
             ReplacementText = allowed ? "" : replacementText.Trim(),
@@ -945,7 +962,7 @@ internal sealed class AdminManagerForm : Form
         };
         displayedElements.Clear(); displayedElements.AddRange(elements);
         foreach (var e in displayedElements)
-            rules.Items.Add($"{(e.Allowed ? "מוצג" : !string.IsNullOrWhiteSpace(e.ReplacementImagePath) ? "מוסתר + תמונה" : e.ReplacementText.Length > 0 ? "מוסתר + חלופי" : "מוסתר")} | {e.Host} | {e.Selector} | {FormatDateRange(e.ActiveFrom, e.ActiveUntil)}");
+            rules.Items.Add($"{(e.Allowed ? "מוצג" : !string.IsNullOrWhiteSpace(e.ReplacementImagePath) ? "מוסתר + תמונה" : e.ReplacementText.Length > 0 ? "מוסתר + חלופי" : "מוסתר")} | {e.Host} | {e.TagName} | {e.ElementLabel} | {e.Selector} | {FormatDateRange(e.ActiveFrom, e.ActiveUntil)}");
         foreach (var h in policy.AllowedHosts) rules.Items.Add($"דומיין מורשה | {h}");
         foreach (var h in policy.AllowedPopupHosts) rules.Items.Add($"חלון מאובטח מותר | {h}");
         foreach (var h in new[] { "hopon.co.il", "ravkavonline.co.il", "donors.matara.pro", "www.matara.pro", "matara.pro", "rishumon.net", "tora.irom.co.il" })
@@ -987,7 +1004,8 @@ internal sealed class AdminManagerForm : Form
         {
             var element = displayedElements[elementIndex];
             selectedElementHost = element.Host;
-            selected.Text = $"רכיב: {element.Host} | CSS: {element.Selector} | {(element.Allowed ? "מותר" : "חסום")} | {FormatDateRange(element.ActiveFrom, element.ActiveUntil)} | {(string.IsNullOrWhiteSpace(element.ReplacementImagePath) ? (string.IsNullOrWhiteSpace(element.ReplacementText) ? "ללא תוכן חלופי" : "טקסט חלופי: " + element.ReplacementText) : "תמונה חלופית: " + Path.GetFileName(element.ReplacementImagePath))}";
+            selectedElementTag = element.TagName ?? ""; selectedElementLabel = element.ElementLabel ?? ""; selectedElementText = element.ElementText ?? ""; selectedElementHref = element.ElementHref ?? "";
+            selected.Text = $"רכיב: {element.Host} | סוג: {element.TagName} | תיאור: {element.ElementLabel} | טקסט: {element.ElementText} | CSS: {element.Selector} | {(element.Allowed ? "מותר" : "חסום")} | {FormatDateRange(element.ActiveFrom, element.ActiveUntil)} | {(string.IsNullOrWhiteSpace(element.ReplacementImagePath) ? (string.IsNullOrWhiteSpace(element.ReplacementText) ? "ללא תוכן חלופי" : "טקסט חלופי: " + element.ReplacementText) : "תמונה חלופית: " + Path.GetFileName(element.ReplacementImagePath))}";
             elementFrom.Checked = element.ActiveFrom.HasValue; if (element.ActiveFrom.HasValue) elementFrom.Value = element.ActiveFrom.Value;
             elementUntil.Checked = element.ActiveUntil.HasValue; if (element.ActiveUntil.HasValue) elementUntil.Value = element.ActiveUntil.Value;
             if (replacementInput is not null) replacementInput.Text = element.ReplacementText ?? "";
