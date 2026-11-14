@@ -118,7 +118,8 @@ internal static class AdminPolicyStore
                 ?? throw new IOException("אימות קובץ ההגדרות לאחר השמירה נכשל.");
             if (persisted.Routes.Count != policy.Routes.Count ||
                 persisted.Elements.Count != policy.Elements.Count ||
-                persisted.AllowedHosts.Count != policy.AllowedHosts.Count)
+                persisted.AllowedHosts.Count != policy.AllowedHosts.Count ||
+                persisted.AllowedPopupHosts.Count != policy.AllowedPopupHosts.Count)
                 throw new IOException("אימות מספר הכללים לאחר השמירה נכשל.");
             AppDiagnostics.Write("Admin policy saved",
                 details: "Routes=" + persisted.Routes.Count +
@@ -369,7 +370,7 @@ internal sealed class AdminManagerForm : Form
     private TextBox? imagePathInput;
     private ComboBox? imageFitInput;
     private PictureBox? replacementPreview;
-    private readonly Label selected = new() { AutoSize = false, Height = 38, Dock = DockStyle.Top, TextAlign = ContentAlignment.MiddleRight };
+    private readonly Label selected = new() { AutoSize = false, Height = 58, Dock = DockStyle.Top, TextAlign = ContentAlignment.MiddleRight };
     private readonly string currentUrl;
     private string selectedElementHost = "";
     public event Action? PickElementRequested;
@@ -385,7 +386,7 @@ internal sealed class AdminManagerForm : Form
     private Button? adminModeButton;
     public AdminManagerForm(string url)
     {
-        currentUrl = url; Text = "ניהול מערכת והרשאות"; Width = 790; Height = 590; MinimumSize = new Size(650, 480);
+        currentUrl = url; Text = "מרכז ניהול מתקדם — חסימות, תאריכים וחלונות מאובטחים"; Width = 1120; Height = 820; MinimumSize = new Size(900, 680);
         StartPosition = FormStartPosition.CenterParent; RightToLeft = RightToLeft.Yes; RightToLeftLayout = true;
         BackColor = Color.FromArgb(11, 20, 34);
         ForeColor = Color.FromArgb(232, 239, 248);
@@ -716,7 +717,7 @@ internal sealed class AdminManagerForm : Form
 
     private void AddRoute(bool allowed)
     {
-        var offset = policy.Routes.Count + displayedElements.Count + policy.AllowedHosts.Count + 7 + AppSettings.Load().BlockedPaths.Count;
+        var offset = policy.Routes.Count + displayedElements.Count + policy.AllowedHosts.Count + policy.AllowedPopupHosts.Count + 7 + AppSettings.Load().BlockedPaths.Count;
         var selectedLinks = rules.SelectedIndices.Cast<int>()
             .Select(index => index - offset)
             .Where(index => index >= 0 && index < scannedLinks.Count)
@@ -897,10 +898,14 @@ internal sealed class AdminManagerForm : Form
         AdminPolicyStore.Save(policy); RefreshRules(); RulesChanged?.Invoke();
     }
 
+    private static string FormatDateRange(DateTime? from, DateTime? until) =>
+        from is null && until is null ? "קבוע" :
+        $"{(from.HasValue ? from.Value.ToString("dd/MM/yyyy") : "ללא התחלה")} – {(until.HasValue ? until.Value.ToString("dd/MM/yyyy") : "ללא סיום")}";
+
     private void RefreshRules()
     {
         rules.Items.Clear();
-        foreach (var r in policy.Routes) rules.Items.Add($"{(r.Allowed ? "מאושר" : "חסום")} | {r.Host}{r.Path}");
+        foreach (var r in policy.Routes) rules.Items.Add($"{(r.Allowed ? "מאושר" : "חסום")} | {r.Host}{r.Path} | {FormatDateRange(r.ActiveFrom, r.ActiveUntil)}");
         IEnumerable<ElementPolicyRule> elements = policy.Elements;
         var filter = elementFilter?.SelectedIndex ?? 0;
         elements = filter switch
@@ -920,7 +925,7 @@ internal sealed class AdminManagerForm : Form
         };
         displayedElements.Clear(); displayedElements.AddRange(elements);
         foreach (var e in displayedElements)
-            rules.Items.Add($"{(e.Allowed ? "מוצג" : !string.IsNullOrWhiteSpace(e.ReplacementImagePath) ? "מוסתר + תמונה" : e.ReplacementText.Length > 0 ? "מוסתר + חלופי" : "מוסתר")} | {e.Host} | {e.Selector}");
+            rules.Items.Add($"{(e.Allowed ? "מוצג" : !string.IsNullOrWhiteSpace(e.ReplacementImagePath) ? "מוסתר + תמונה" : e.ReplacementText.Length > 0 ? "מוסתר + חלופי" : "מוסתר")} | {e.Host} | {e.Selector} | {FormatDateRange(e.ActiveFrom, e.ActiveUntil)}");
         foreach (var h in policy.AllowedHosts) rules.Items.Add($"דומיין מורשה | {h}");
         foreach (var h in policy.AllowedPopupHosts) rules.Items.Add($"חלון מאובטח מותר | {h}");
         foreach (var h in new[] { "hopon.co.il", "ravkavonline.co.il", "donors.matara.pro", "www.matara.pro", "matara.pro", "rishumon.net", "tora.irom.co.il" })
@@ -962,7 +967,7 @@ internal sealed class AdminManagerForm : Form
         {
             var element = displayedElements[elementIndex];
             selectedElementHost = element.Host;
-            selected.Text = $"רכיב שנבחר (כלל קיים) | {element.Host}: {element.Selector}";
+            selected.Text = $"רכיב: {element.Host} | CSS: {element.Selector} | {(element.Allowed ? "מותר" : "חסום")} | {FormatDateRange(element.ActiveFrom, element.ActiveUntil)} | {(string.IsNullOrWhiteSpace(element.ReplacementImagePath) ? (string.IsNullOrWhiteSpace(element.ReplacementText) ? "ללא תוכן חלופי" : "טקסט חלופי: " + element.ReplacementText) : "תמונה חלופית: " + Path.GetFileName(element.ReplacementImagePath))}";
             elementFrom.Checked = element.ActiveFrom.HasValue; if (element.ActiveFrom.HasValue) elementFrom.Value = element.ActiveFrom.Value;
             elementUntil.Checked = element.ActiveUntil.HasValue; if (element.ActiveUntil.HasValue) elementUntil.Value = element.ActiveUntil.Value;
             if (replacementInput is not null) replacementInput.Text = element.ReplacementText ?? "";
@@ -981,7 +986,7 @@ internal sealed class AdminManagerForm : Form
             }
             return;
         }
-        var offset = policy.Routes.Count + displayedElements.Count + policy.AllowedHosts.Count + 7 + AppSettings.Load().BlockedPaths.Count;
+        var offset = policy.Routes.Count + displayedElements.Count + policy.AllowedHosts.Count + policy.AllowedPopupHosts.Count + 7 + AppSettings.Load().BlockedPaths.Count;
         var scannedIndex = index - offset;
         if (scannedIndex >= 0 && scannedIndex < scannedLinks.Count)
         {
