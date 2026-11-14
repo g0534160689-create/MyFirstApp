@@ -1857,12 +1857,18 @@ internal sealed class MainForm : Form
             return;
         }
 
-        // Secure popups are denied by default, including about:blank bootstraps.
-        // Only exact HTTPS hosts explicitly approved in Admin > Secure windows may open.
-        if (!Uri.TryCreate(e.Uri, UriKind.Absolute, out target) ||
-            !target.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase) ||
-            IsGooglePayUri(target) ||
-            !AdminPolicyStore.IsPopupHostAllowed(target.IdnHost))
+        // Secure popups are denied by default. An about:blank bootstrap is
+        // permitted only when the administrator has explicitly configured at least
+        // one popup host; every subsequent navigation is checked against that exact allowlist.
+        var popupPolicy = AdminPolicyStore.Load();
+        var isApprovedBootstrap = Uri.TryCreate(e.Uri, UriKind.Absolute, out target) &&
+            target.Equals(new Uri("about:blank")) && e.IsUserInitiated &&
+            popupPolicy.AllowedPopupHosts.Count > 0;
+        if (!isApprovedBootstrap &&
+            (!Uri.TryCreate(e.Uri, UriKind.Absolute, out target) ||
+             !target.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase) ||
+             IsGooglePayUri(target) ||
+             !AdminPolicyStore.IsPopupHostAllowed(target.IdnHost)))
         {
             e.Handled = true;
             _status.Text = "החלון המאובטח נחסם. אפשר לאשר דומיין מסוים באזור הניהול.";
