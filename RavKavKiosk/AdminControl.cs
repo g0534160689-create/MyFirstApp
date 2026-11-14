@@ -789,7 +789,7 @@ internal sealed class AdminManagerForm : Form
         if (!policy.AllowedHosts.Contains(host, StringComparer.OrdinalIgnoreCase)) policy.AllowedHosts.Add(host);
         AdminPolicyStore.Save(policy); hostInput.Clear(); RefreshRules(); RulesChanged?.Invoke();
     }
-    public void ReceivePickedSelector(string selector, string tag = "", string href = "", string label = "", string host = "")
+    public void ReceivePickedSelector(string selector, string tag = "", string href = "", string label = "", string host = "", string elementText = "")
     {
         selectedElementHost = string.IsNullOrWhiteSpace(host) && Uri.TryCreate(currentUrl, UriKind.Absolute, out var pageUri) ? pageUri.Host : host;
         selectedElementSelector = selector;
