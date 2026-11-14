@@ -1166,6 +1166,7 @@ internal sealed class MainForm : Form
         _adminManager = new AdminManagerForm(currentUrl);
         _adminManager.PickElementRequested += StartElementPicker;
         _adminManager.ScanLinksRequested += ScanCurrentPageLinks;
+        _adminManager.ScanPopupDomainsRequested += ScanCurrentPagePopupDomains;
         _adminManager.BlockedElementsRefreshRequested += ReportBlockedElements;
         _adminManager.RulesChanged += () => { _ = ApplyElementRulesAsync(); _ = ApplyRouteRulesAsync(); };
         _adminManager.AdminModeChanged += SetAdminMode;
@@ -1313,6 +1314,20 @@ internal sealed class MainForm : Form
                 _adminManager?.ReceiveBlockedElementReport(items);
                 return;
             }
+            if (messageType == "popup-domain-scan")
+            {
+                var domains = new List<string>();
+                if (doc.RootElement.TryGetProperty("domains", out var domainItems) && domainItems.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var item in domainItems.EnumerateArray())
+                    {
+                        var host = item.GetString();
+                        if (!string.IsNullOrWhiteSpace(host)) domains.Add(host);
+                    }
+                }
+                _adminManager?.ReceiveScannedPopupDomains(domains);
+                return;
+            }
             if (messageType == "link-scan")
             {
                 var links = new List<(string Url, string Text, bool Blocked)>();
@@ -1356,6 +1371,39 @@ internal sealed class MainForm : Form
         {
             AppDiagnostics.Write("Report blocked elements", ex);
             MessageBox.Show(this, "לא ניתן לקבל כרגע את רשימת הרכיבים שנחסמו.");
+        }
+    }
+
+    private async void ScanCurrentPagePopupDomains()
+    {
+        if (!_browserInitialized || _browser.CoreWebView2 is null)
+        {
+            MessageBox.Show(this, "אין עמוד פתוח לסריקה.");
+            return;
+        }
+
+        const string script = """
+        (() => {
+          const hosts = new Set();
+          const add = value => {
+            try {
+              const url = new URL(value, document.baseURI);
+              if (url.protocol === "https:" && url.hostname) hosts.add(url.hostname.toLowerCase());
+            } catch { }
+          };
+          document.querySelectorAll("a[href], area[href], iframe[src], form[action]").forEach(element => {
+            add(element.href || element.src || element.action ||
+                element.getAttribute("href") || element.getAttribute("src") || element.getAttribute("action"));
+          });
+          chrome.webview.postMessage({type:"popup-domain-scan", domains:[...hosts].slice(0,500)});
+        })();
+        """;
+
+        try { await _browser.CoreWebView2.ExecuteScriptAsync(script); }
+        catch (Exception ex)
+        {
+            AppDiagnostics.Write("Scan popup domains", ex);
+            MessageBox.Show(this, "זיהוי הדומיינים נכשל.");
         }
     }
 
