@@ -931,6 +931,13 @@ internal sealed class MainForm : Form
                 var core = _browser.CoreWebView2;
                 core.Settings.AreDefaultContextMenusEnabled = false;
                 core.Settings.AreDefaultScriptDialogsEnabled = true;
+                // Prevent the embedded browser from offering to remember payment-card
+                // details or autofill card fields in the Rav-Kav Online checkout.
+                if (profileKey == "RavKavOnline")
+                {
+                    core.Settings.IsGeneralAutofillEnabled = false;
+                    core.Settings.IsPasswordAutosaveEnabled = false;
+                }
                 core.Settings.AreDevToolsEnabled = false;
                 core.Settings.IsStatusBarEnabled = false;
                 core.Settings.IsZoomControlEnabled = false;
@@ -974,6 +981,8 @@ internal sealed class MainForm : Form
                 // history/link hook can interfere with its reader bootstrap and SPA flow.
                 if (profileKey == "HopOn")
                     await core.AddScriptToExecuteOnDocumentCreatedAsync(BuildRouteGuardScript(_settings.StartUrl));
+                else
+                    await core.AddScriptToExecuteOnDocumentCreatedAsync(BuildRavKavNoCardSaveScript());
                 core.DownloadStarting += (_, args) => args.Cancel = true;
                 core.LaunchingExternalUriScheme += OnLaunchingExternalUriScheme;
                 core.PermissionRequested += (_, args) =>
@@ -1186,6 +1195,70 @@ internal sealed class MainForm : Form
         """;
         try { await _browser.CoreWebView2.ExecuteScriptAsync(script); }
         catch (Exception ex) { AppDiagnostics.Write("Start element picker", ex); _elementPicking = false; }
+    }
+
+    private static string BuildRavKavNoCardSaveScript()
+    {
+        // Runs at document creation in the main page and embedded frames. It disables
+        // browser autofill and suppresses only explicit "save/remember card" controls;
+        // payment fields and the payment submission flow remain available.
+        return """
+            (() => {
+              if (window.__ravKavNoCardSaveGuardInstalled) return;
+              window.__ravKavNoCardSaveGuardInstalled = true;
+              const saveText = /(?:save|remember|store|keep)\\s+(?:this\\s+)?(?:credit\\s+)?card|(?:שמור|שמירת|לשמור|זכור|זכירת).{0,35}(?:כרטיס|אשראי)|(?:כרטיס|אשראי).{0,35}(?:לשמירה|לשמור|לזכור|הבא)/i;
+              const cardField = el => /cc-|card|credit/i.test([
+                el.name, el.id, el.autocomplete, el.getAttribute('aria-label'),
+                el.placeholder
+              ].filter(Boolean).join(' '));
+              const nearbyText = el => {
+                const parts = [];
+                if (el.labels) for (const label of el.labels) parts.push(label.innerText || label.textContent || '');
+                let p = el.parentElement;
+                for (let i = 0; p && i < 3; i++, p = p.parentElement)
+                  parts.push((p.innerText || p.textContent || '').slice(0, 500));
+                return parts.join(' ');
+              };
+              const enforce = () => {
+                for (const el of document.querySelectorAll('input, select, textarea')) {
+                  if (cardField(el)) {
+                    el.setAttribute('autocomplete', 'off');
+                    if (el.type === 'checkbox' && saveText.test(nearbyText(el))) {
+                      el.checked = false;
+                      el.disabled = true;
+                      el.setAttribute('aria-hidden', 'true');
+                      const label = el.labels && el.labels[0];
+                      if (label) label.style.display = 'none';
+                    }
+                  }
+                  if (el.type === 'checkbox' && saveText.test(nearbyText(el))) {
+                    el.checked = false;
+                    el.disabled = true;
+                    const label = el.labels && el.labels[0];
+                    if (label) label.style.display = 'none';
+                  }
+                }
+              };
+              enforce();
+              new MutationObserver(enforce).observe(document.documentElement, {
+                childList: true, subtree: true, attributes: true,
+                attributeFilter: ['checked', 'type', 'name', 'id', 'autocomplete']
+              });
+              document.addEventListener('click', event => {
+                const el = event.target && event.target.closest && event.target.closest('input[type="checkbox"]');
+                if (el && saveText.test(nearbyText(el))) {
+                  el.checked = false;
+                  el.disabled = true;
+                  event.preventDefault();
+                  event.stopImmediatePropagation();
+                }
+              }, true);
+              document.addEventListener('submit', () => {
+                for (const el of document.querySelectorAll('input[type="checkbox"]'))
+                  if (saveText.test(nearbyText(el))) el.checked = false;
+              }, true);
+            })();
+            """;
     }
 
     private void OnWebMessageReceived(object? sender, CoreWebView2WebMessageReceivedEventArgs e)
