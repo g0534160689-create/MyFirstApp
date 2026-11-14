@@ -8,6 +8,7 @@ internal sealed class AdminPolicy
 {
     public AdminPolicy() { }
     public List<string> AllowedHosts { get; set; } = [];
+    public List<string> AllowedPopupHosts { get; set; } = [];
     public bool ShowRavKavPanel { get; set; } = true;
     public bool ShowHopOnPanel { get; set; } = true;
     public string ThemeId { get; set; } = "midnight";
@@ -21,6 +22,8 @@ internal sealed class RoutePolicyRule
     public string Host { get; set; } = "";
     public string Path { get; set; } = "/";
     public bool Allowed { get; set; }
+    public DateTime? ActiveFrom { get; set; }
+    public DateTime? ActiveUntil { get; set; }
 }
 internal sealed class ElementPolicyRule
 {
@@ -29,6 +32,8 @@ internal sealed class ElementPolicyRule
     public string Host { get; set; } = "";
     public string Selector { get; set; } = "";
     public bool Allowed { get; set; }
+    public DateTime? ActiveFrom { get; set; }
+    public DateTime? ActiveUntil { get; set; }
     public string ReplacementText { get; set; } = "";
     public string ReplacementImagePath { get; set; } = "";
     public string ReplacementImageFit { get; set; } = "contain";
@@ -218,14 +223,18 @@ internal static class AdminPolicyStore
     public static bool? RouteDecision(Uri uri)
     {
         var p = Load();
+        var today = DateTime.Today;
         var match = p.Routes
-            .Where(r => r.Host.Equals(uri.Host, StringComparison.OrdinalIgnoreCase) && PathMatches(uri.AbsolutePath, r.Path))
+            .Where(r => (r.ActiveFrom is null || today >= r.ActiveFrom.Value.Date) &&
+                        (r.ActiveUntil is null || today <= r.ActiveUntil.Value.Date) &&
+                        r.Host.Equals(uri.Host, StringComparison.OrdinalIgnoreCase) && PathMatches(uri.AbsolutePath, r.Path))
             .OrderByDescending(r => r.Path.Length)
             .ThenBy(r => r.Allowed) // deny wins when two rules have equal specificity
             .FirstOrDefault();
         return match?.Allowed;
     }
     public static bool IsHostAllowed(string host) => Load().AllowedHosts.Contains(host, StringComparer.OrdinalIgnoreCase);
+    public static bool IsPopupHostAllowed(string host) => Load().AllowedPopupHosts.Contains(host, StringComparer.OrdinalIgnoreCase);
     public static bool IsHostBlocked(string host) => Load().Routes.Any(r => r.Host.Equals(host, StringComparison.OrdinalIgnoreCase) && r.Path == "/" && !r.Allowed);
     public static bool PathMatches(string actual, string rule)
     {
@@ -236,8 +245,14 @@ internal static class AdminPolicyStore
         if (root.Length == 0 || root == "/") return true;
         return actual.Equals(root, StringComparison.OrdinalIgnoreCase) || actual.StartsWith(root + "/", StringComparison.OrdinalIgnoreCase);
     }
-    public static IReadOnlyList<ElementPolicyRule> ElementRules(string host) =>
-        Load().Elements.Where(r => r.Host.Equals(host, StringComparison.OrdinalIgnoreCase)).ToArray();
+    public static IReadOnlyList<ElementPolicyRule> ElementRules(string host)
+    {
+        var today = DateTime.Today;
+        return Load().Elements.Where(r =>
+            (r.ActiveFrom is null || today >= r.ActiveFrom.Value.Date) &&
+            (r.ActiveUntil is null || today <= r.ActiveUntil.Value.Date) &&
+            r.Host.Equals(host, StringComparison.OrdinalIgnoreCase)).ToArray();
+    }
 }
 
 internal static class AdminAuthentication
@@ -339,6 +354,11 @@ internal sealed class AdminManagerForm : Form
     private readonly TextBox ruleInput = new() { Width = 330 };
     private readonly TextBox manualSelectorInput = new() { Width = 230, PlaceholderText = "לדוגמה: #elementId או .class" };
     private readonly TextBox hostInput = new() { Width = 190 };
+    private readonly TextBox popupHostInput = new() { Width = 190, PlaceholderText = "דומיין לחלון מאובטח" };
+    private readonly DateTimePicker routeFrom = new() { Width = 118, Format = DateTimePickerFormat.Short, ShowCheckBox = true };
+    private readonly DateTimePicker routeUntil = new() { Width = 118, Format = DateTimePickerFormat.Short, ShowCheckBox = true };
+    private readonly DateTimePicker elementFrom = new() { Width = 118, Format = DateTimePickerFormat.Short, ShowCheckBox = true };
+    private readonly DateTimePicker elementUntil = new() { Width = 118, Format = DateTimePickerFormat.Short, ShowCheckBox = true };
     private readonly ListBox rules = new() { Dock = DockStyle.Fill, HorizontalScrollbar = true, SelectionMode = SelectionMode.MultiExtended };
     private readonly List<(string Url, string Text, bool Blocked)> scannedLinks = [];
     private readonly List<ElementPolicyRule> displayedElements = [];
@@ -457,6 +477,8 @@ internal sealed class AdminManagerForm : Form
         var route = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft, WrapContents = true };
         route.Controls.Add(new Label { Text = "כתובת או נתיב:", AutoSize = true, Padding = new Padding(0, 8, 0, 0) });
         ruleInput.Text = currentUrl; route.Controls.Add(ruleInput);
+        route.Controls.Add(new Label { Text = "מתאריך:", AutoSize = true, Padding = new Padding(3, 8, 0, 0) }); route.Controls.Add(routeFrom);
+        route.Controls.Add(new Label { Text = "עד תאריך:", AutoSize = true, Padding = new Padding(3, 8, 0, 0) }); route.Controls.Add(routeUntil);
         var block = new Button { Text = "חסום נתיב", Width = 100 }; block.Click += (_, _) => AddRoute(false);
         var allow = new Button { Text = "אפשר נתיב", Width = 100 }; allow.Click += (_, _) => AddRoute(true);
         var scan = new Button { Text = "סרוק קישורים בעמוד", Width = 150 }; scan.Click += (_, _) => ScanLinksRequested?.Invoke();
@@ -465,7 +487,13 @@ internal sealed class AdminManagerForm : Form
         host.Controls.Add(new Label { Text = "דומיין מורשה:", AutoSize = true, Padding = new Padding(0, 8, 0, 0) });
         host.Controls.Add(hostInput);
         var addHost = new Button { Text = "הוסף לאתרים המורשים", Width = 170 }; addHost.Click += (_, _) => AddHost();
-        host.Controls.Add(addHost); root.Controls.Add(host, 0, 3);
+        host.Controls.Add(addHost);
+        host.Controls.Add(new Label { Text = "חלון מאובטח מורשה:", AutoSize = true, Padding = new Padding(8, 8, 0, 0) });
+        host.Controls.Add(popupHostInput);
+        var addPopupHost = new Button { Text = "אפשר חלון זה בלבד", Width = 145 };
+        addPopupHost.Click += (_, _) => AddPopupHost();
+        host.Controls.Add(addPopupHost);
+        root.Controls.Add(host, 0, 3);
         root.Controls.Add(rules, 0, 4);
         var selectionBar = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft, WrapContents = false };
         selected.Width = 300;
@@ -488,6 +516,8 @@ internal sealed class AdminManagerForm : Form
         root.Controls.Add(selectionBar, 0, 5);
         var replacementRow = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft, WrapContents = true, AutoScroll = true };
         replacementRow.Controls.Add(new Label { Text = "טקסט חלופי:", AutoSize = true, Padding = new Padding(0, 8, 0, 0) });
+        replacementRow.Controls.Add(new Label { Text = "מתאריך:", AutoSize = true, Padding = new Padding(3, 8, 0, 0) }); replacementRow.Controls.Add(elementFrom);
+        replacementRow.Controls.Add(new Label { Text = "עד תאריך:", AutoSize = true, Padding = new Padding(3, 8, 0, 0) }); replacementRow.Controls.Add(elementUntil);
         replacementInput = new TextBox { Width = 245, Height = 48, Multiline = true, ScrollBars = ScrollBars.Vertical, MaxLength = 1000 };
         replacementInput.PlaceholderText = "טקסט להצגה במקום הרכיב"; replacementRow.Controls.Add(replacementInput);
         imagePathInput = new TextBox { Width = 220, Height = 28, ReadOnly = true, PlaceholderText = "בחר תמונה מהמחשב..." };
@@ -700,12 +730,32 @@ internal sealed class AdminManagerForm : Form
             if (!Uri.TryCreate(target, UriKind.Absolute, out var uri) || uri.Scheme != Uri.UriSchemeHttps) continue;
             var path = uri.AbsolutePath;
             policy.Routes.RemoveAll(r => r.Host.Equals(uri.Host, StringComparison.OrdinalIgnoreCase) && r.Path.Equals(path, StringComparison.OrdinalIgnoreCase));
-            policy.Routes.Add(new RoutePolicyRule(uri.Host, path, allowed));
+            policy.Routes.Add(new RoutePolicyRule(uri.Host, path, allowed)
+            {
+                ActiveFrom = routeFrom.Checked ? routeFrom.Value.Date : null,
+                ActiveUntil = routeUntil.Checked ? routeUntil.Value.Date : null
+            });
             added++;
         }
         if (added == 0) { MessageBox.Show(this, "בחר קישור מהרשימה או הזן כתובת HTTPS מלאה."); return; }
         AdminPolicyStore.Save(policy); RefreshRules(); RulesChanged?.Invoke();
         selected.Text = allowed ? $"נפתחו {added} נתיבים שנבחרו." : $"נחסמו {added} נתיבים שנבחרו.";
+    }
+    private void AddPopupHost()
+    {
+        var host = popupHostInput.Text.Trim().TrimEnd('.').ToLowerInvariant();
+        if (host.Length == 0 || host.Contains('/') || host.Contains(':') || host.Contains(' ') ||
+            Uri.CheckHostName(host) == UriHostNameType.Unknown)
+        {
+            MessageBox.Show(this, "הזן דומיין תקין בלבד, ללא נתיב.");
+            return;
+        }
+        if (!policy.AllowedPopupHosts.Contains(host, StringComparer.OrdinalIgnoreCase))
+            policy.AllowedPopupHosts.Add(host);
+        AdminPolicyStore.Save(policy);
+        popupHostInput.Clear();
+        RefreshRules();
+        selected.Text = "חלונות מאובטחים חסומים כברירת מחדל; הדומיין שנבחר נוסף לרשימת ההיתרים.";
     }
     private void AddHost()
     {
@@ -806,6 +856,8 @@ internal sealed class AdminManagerForm : Form
         if (imagePath.Length > 0 && new FileInfo(imagePath).Length > 8 * 1024 * 1024) { MessageBox.Show(this, "גודל התמונה מוגבל ל־8MB."); return; }
         var rule = new ElementPolicyRule(host, selector, allowed)
         {
+            ActiveFrom = elementFrom.Checked ? elementFrom.Value.Date : null,
+            ActiveUntil = elementUntil.Checked ? elementUntil.Value.Date : null,
             ReplacementText = allowed ? "" : replacementText.Trim(),
             ReplacementImagePath = imagePath,
             ReplacementImageFit = imageFitInput?.SelectedIndex == 1 ? "cover" : "contain"
@@ -833,6 +885,8 @@ internal sealed class AdminManagerForm : Form
                 var hostOffset = policy.Routes.Count + displayedElements.Count;
                 if (index >= hostOffset && index < hostOffset + policy.AllowedHosts.Count)
                     policy.AllowedHosts.RemoveAt(index - hostOffset);
+                else if (index >= hostOffset + policy.AllowedHosts.Count && index < hostOffset + policy.AllowedHosts.Count + policy.AllowedPopupHosts.Count)
+                    policy.AllowedPopupHosts.RemoveAt(index - hostOffset - policy.AllowedHosts.Count);
                 else
                 {
                     MessageBox.Show(this, "השורה שנבחרה היא מידע מובנה או קישור שנסרק. בחר כלל מותאם כדי למחוק אותו.");
@@ -868,6 +922,7 @@ internal sealed class AdminManagerForm : Form
         foreach (var e in displayedElements)
             rules.Items.Add($"{(e.Allowed ? "מוצג" : !string.IsNullOrWhiteSpace(e.ReplacementImagePath) ? "מוסתר + תמונה" : e.ReplacementText.Length > 0 ? "מוסתר + חלופי" : "מוסתר")} | {e.Host} | {e.Selector}");
         foreach (var h in policy.AllowedHosts) rules.Items.Add($"דומיין מורשה | {h}");
+        foreach (var h in policy.AllowedPopupHosts) rules.Items.Add($"חלון מאובטח מותר | {h}");
         foreach (var h in new[] { "hopon.co.il", "ravkavonline.co.il", "donors.matara.pro", "www.matara.pro", "matara.pro", "rishumon.net", "tora.irom.co.il" })
             rules.Items.Add($"דומיין מורשה מובנה | {h}");
         foreach (var path in AppSettings.Load().BlockedPaths)
@@ -897,6 +952,8 @@ internal sealed class AdminManagerForm : Form
         {
             var route = policy.Routes[index];
             ruleInput.Text = $"https://{route.Host}{route.Path}";
+            routeFrom.Checked = route.ActiveFrom.HasValue; if (route.ActiveFrom.HasValue) routeFrom.Value = route.ActiveFrom.Value;
+            routeUntil.Checked = route.ActiveUntil.HasValue; if (route.ActiveUntil.HasValue) routeUntil.Value = route.ActiveUntil.Value;
             selected.Text = $"נתיב שנבחר: {(route.Allowed ? "מאושר" : "חסום")} — {ruleInput.Text}";
             return;
         }
@@ -906,6 +963,8 @@ internal sealed class AdminManagerForm : Form
             var element = displayedElements[elementIndex];
             selectedElementHost = element.Host;
             selected.Text = $"רכיב שנבחר (כלל קיים) | {element.Host}: {element.Selector}";
+            elementFrom.Checked = element.ActiveFrom.HasValue; if (element.ActiveFrom.HasValue) elementFrom.Value = element.ActiveFrom.Value;
+            elementUntil.Checked = element.ActiveUntil.HasValue; if (element.ActiveUntil.HasValue) elementUntil.Value = element.ActiveUntil.Value;
             if (replacementInput is not null) replacementInput.Text = element.ReplacementText ?? "";
             if (imagePathInput is not null) imagePathInput.Text = element.ReplacementImagePath ?? "";
             if (imageFitInput is not null) imageFitInput.SelectedIndex = element.ReplacementImageFit == "cover" ? 1 : 0;
