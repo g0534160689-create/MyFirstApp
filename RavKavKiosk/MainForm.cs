@@ -1320,7 +1320,7 @@ internal sealed class MainForm : Form
                 {
                     var urlText = item.GetProperty("url").GetString() ?? "";
                     if (!Uri.TryCreate(urlText, UriKind.Absolute, out var linkUri) || linkUri.Scheme != Uri.UriSchemeHttps) continue;
-                    var labelText = item.TryGetProperty("text", out var textValue) ? textValue.GetString() ?? "" : "";
+                    var labelText = item.TryGetProperty("text", out var linkLabelValue) ? linkLabelValue.GetString() ?? "" : "";
                     var blocked = !IsAllowedNavigationUri(linkUri) || IsBlockedNavigationUri(linkUri);
                     links.Add((urlText, string.IsNullOrWhiteSpace(labelText) ? "(ללא כותרת)" : labelText, blocked));
                 }
