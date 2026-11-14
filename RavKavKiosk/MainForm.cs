@@ -1230,92 +1230,61 @@ internal sealed class MainForm : Form
 
     private static string BuildRavKavNoCardSaveScript()
     {
-        // This script is injected into the top-level page and each hosted payment frame.
-        // It targets the provider's stable reusableId rather than relying on translated text.
+        // Block only the reusable-card opt-in checkbox. Never touch card-number,
+        // expiry, CVV, identity, or submit controls.
         return """
             (() => {
               if (window.__ravKavNoCardSaveGuardInstalled) return;
               window.__ravKavNoCardSaveGuardInstalled = true;
-              const selectors = [
-                '#reusableId',
-                'input[type="checkbox"][id="reusableId"]',
-                'label[for="reusableId"]',
-                'div.checkbox.m-top'
-              ];
-              const hide = el => {
-                if (!el) return;
-                el.style.setProperty('display', 'none', 'important');
-                el.style.setProperty('visibility', 'hidden', 'important');
-                el.style.setProperty('pointer-events', 'none', 'important');
-                el.setAttribute('aria-hidden', 'true');
-              };
-              const blockReusableCard = () => {
-                // Exact elements from the inspected payment DOM.
+
+              const hideOnlySaveOption = () => {
                 const input = document.querySelector('#reusableId');
                 const label = document.querySelector('label[for="reusableId"]');
                 const wrapper = input?.closest('div.checkbox.m-top') ||
-                                label?.closest('div.checkbox.m-top') ||
-                                label?.parentElement;
+                                label?.closest('div.checkbox.m-top');
+
                 if (input) {
-                  input.checked = false;
-                  input.defaultChecked = false;
-                  input.removeAttribute('checked');
-                  input.disabled = true;
+                  if (input.checked) input.checked = false;
+                  if (input.defaultChecked) input.defaultChecked = false;
+                  if (input.hasAttribute('checked')) input.removeAttribute('checked');
+                  if (!input.disabled) input.disabled = true;
                   input.setAttribute('aria-checked', 'false');
                   input.setAttribute('autocomplete', 'off');
-                  hide(input);
+                  input.style.setProperty('display', 'none', 'important');
                 }
-                hide(label);
-                hide(wrapper);
+                if (label) label.style.setProperty('display', 'none', 'important');
+                if (wrapper) wrapper.style.setProperty('display', 'none', 'important');
+              };
 
-                // Fallback for a provider that changes only the visible label.
-                const textPattern = /שמור\s+לשימוש\s+חוזר|save\s+(?:this\s+)?card|remember\s+card/i;
-                for (const candidate of document.querySelectorAll('label, .checkbox, [class*="checkbox"]')) {
-                  if (textPattern.test(candidate.innerText || candidate.textContent || '')) {
-                    const associated = candidate.querySelector('input[type="checkbox"]') ||
-                      (candidate.htmlFor ? document.getElementById(candidate.htmlFor) : null);
-                    if (associated) {
-                      associated.checked = false;
-                      associated.defaultChecked = false;
-                      associated.removeAttribute('checked');
-                      associated.disabled = true;
-                    }
-                    hide(candidate);
-                  }
-                }
-              };
               const enforce = () => {
-                try { blockReusableCard(); } catch { /* payment DOM may be mid-render */ }
+                try { hideOnlySaveOption(); } catch { /* wait for payment DOM */ }
               };
+
               enforce();
-              const observer = new MutationObserver(enforce);
-              const startObserver = () => {
-                if (document.documentElement)
-                  observer.observe(document.documentElement, {
-                    childList: true, subtree: true, attributes: true,
-                    attributeFilter: ['checked', 'disabled', 'id', 'for', 'class', 'style']
-                  });
+              // Watch only newly inserted nodes. Watching style/checked attributes
+              // here creates a self-triggering observer loop and can freeze checkout.
+              const observeWhenReady = () => {
+                if (!document.documentElement) return;
+                const observer = new MutationObserver(enforce);
+                observer.observe(document.documentElement, { childList: true, subtree: true });
                 enforce();
               };
-              if (document.documentElement) startObserver();
-              else document.addEventListener('DOMContentLoaded', startObserver, { once: true });
+              if (document.documentElement) observeWhenReady();
+              else document.addEventListener('DOMContentLoaded', observeWhenReady, { once: true });
 
-              // Prevent mouse, keyboard, and scripted form interaction from opting in.
-              const stopOptIn = event => {
+              const preventSaveOptIn = event => {
                 const target = event.target;
-                if (!target) return;
-                const label = target.closest?.('label[for="reusableId"], #reusableId, div.checkbox.m-top');
-                if (label) {
-                  event.preventDefault();
-                  event.stopImmediatePropagation();
-                  event.stopPropagation();
-                  enforce();
-                }
+                if (!target?.closest) return;
+                const saveControl = target.closest('#reusableId, label[for="reusableId"]');
+                if (!saveControl) return;
+                event.preventDefault();
+                event.stopImmediatePropagation();
+                event.stopPropagation();
+                enforce();
               };
               for (const type of ['click', 'change', 'input', 'keydown'])
-                document.addEventListener(type, stopOptIn, true);
+                document.addEventListener(type, preventSaveOptIn, true);
               document.addEventListener('submit', enforce, true);
-              window.setInterval(enforce, 500);
             })();
             """;
     }
