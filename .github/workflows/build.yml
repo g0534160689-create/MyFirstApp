@@ -90,5 +90,5 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $tag = "v1.1.${{ github.run_number }}"
+          $tag = "v1.2.${{ github.run_number }}"
           gh release create $tag "installer-output/RavKavKiosk-Setup.exe" --title "RavKavKiosk Setup $tag" --notes "Single-file Windows x64 installer. Includes the self-contained app and the offline Evergreen WebView2 Runtime installer."
