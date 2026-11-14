@@ -386,6 +386,7 @@ internal sealed class AdminManagerForm : Form
     private readonly Label selected = new() { AutoSize = false, Height = 58, Dock = DockStyle.Top, TextAlign = ContentAlignment.MiddleRight };
     private readonly string currentUrl;
     private string selectedElementHost = "";
+    private string selectedElementSelector = "";
     private string selectedElementTag = "";
     private string selectedElementLabel = "";
     private string selectedElementText = "";
@@ -791,6 +792,7 @@ internal sealed class AdminManagerForm : Form
     public void ReceivePickedSelector(string selector, string tag = "", string href = "", string label = "", string host = "")
     {
         selectedElementHost = string.IsNullOrWhiteSpace(host) && Uri.TryCreate(currentUrl, UriKind.Absolute, out var pageUri) ? pageUri.Host : host;
+        selectedElementSelector = selector;
         selectedElementTag = tag ?? "";
         selectedElementLabel = label ?? "";
         selectedElementText = "";
@@ -866,6 +868,7 @@ internal sealed class AdminManagerForm : Form
         }
 
         selectedElementHost = pageUri.Host;
+        selectedElementSelector = selector;
         selectedElementTag = "CSS"; selectedElementLabel = ""; selectedElementText = ""; selectedElementHref = "";
         selected.Text = $"רכיב שנבחר (CSS): {selector}";
         SaveSelectedElement(false);
@@ -874,17 +877,15 @@ internal sealed class AdminManagerForm : Form
 
     private void SaveSelectedElement(bool allowed, string replacementText = "", string replacementImagePath = "")
     {
-        var marker = ": ";
-        var split = selected.Text.LastIndexOf(marker, StringComparison.Ordinal);
-        var selector = selected.Text.StartsWith("רכיב שנבחר", StringComparison.Ordinal) && split >= 0 ? selected.Text[(split + marker.Length)..] : "";
+        var selector = selectedElementSelector;
         var host = selectedElementHost;
         if (selector.Length == 0 || string.IsNullOrWhiteSpace(host)) { MessageBox.Show(this, "בחר תחילה רכיב מתוך האתר באמצעות לחיצה שמאלית או בחר כלל רכיב מהרשימה."); return; }
-        policy.Elements.RemoveAll(r => r.Host.Equals(host, StringComparison.OrdinalIgnoreCase) && r.Selector == selector);
         if (elementFrom.Checked && elementUntil.Checked && elementUntil.Value.Date < elementFrom.Value.Date)
         {
             MessageBox.Show(this, "תאריך סיום החסימה חייב להיות שווה לתאריך ההתחלה או מאוחר ממנו.");
             return;
         }
+        policy.Elements.RemoveAll(r => r.Host.Equals(host, StringComparison.OrdinalIgnoreCase) && r.Selector == selector);
         var imagePath = allowed ? "" : replacementImagePath.Trim();
         if (imagePath.Length > 0 && (!File.Exists(imagePath) || Path.GetExtension(imagePath).ToLowerInvariant() is not (".png" or ".jpg" or ".jpeg" or ".webp" or ".gif" or ".bmp"))) { MessageBox.Show(this, "בחר קובץ תמונה תקין מסוג PNG, JPG, WEBP, GIF או BMP."); return; }
         if (imagePath.Length > 0 && new FileInfo(imagePath).Length > 8 * 1024 * 1024) { MessageBox.Show(this, "גודל התמונה מוגבל ל־8MB."); return; }
