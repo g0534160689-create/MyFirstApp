@@ -1214,11 +1214,12 @@ internal sealed class MainForm : Form
             const selector = selectorFor(el);
             const tag = el.tagName.toLowerCase();
             const href = el.closest("a[href]")?.href || "";
-            const label = (el.innerText || el.getAttribute("aria-label") || el.getAttribute("title") || "").trim().slice(0,120);
+            const label = (el.getAttribute("aria-label") || el.getAttribute("title") || "").trim().slice(0,120);
+            const elementText = (el.innerText || el.textContent || "").trim().replace(/\\s+/g, " ").slice(0,240);
             if (previous) previous.style.outline = previous.__kioskOldOutline || "";
             document.removeEventListener("mousemove", move, true); document.removeEventListener("click", pick, true);
             window.__kioskPickerInstalled = false; document.body.style.cursor = "";
-            chrome.webview.postMessage({type:"element-picked", selector, tag, href, label});
+            chrome.webview.postMessage({type:"element-picked", selector, tag, href, label, elementText});
           };
           document.body.style.cursor = "crosshair";
           document.addEventListener("mousemove", move, true); document.addEventListener("click", pick, true);
@@ -1333,8 +1334,9 @@ internal sealed class MainForm : Form
             var tag = doc.RootElement.TryGetProperty("tag", out var tagValue) ? tagValue.GetString() : "";
             var href = doc.RootElement.TryGetProperty("href", out var hrefValue) ? hrefValue.GetString() : "";
             var label = doc.RootElement.TryGetProperty("label", out var labelValue) ? labelValue.GetString() : "";
+            var elementText = doc.RootElement.TryGetProperty("elementText", out var textValue) ? textValue.GetString() : "";
             var pickedHost = Uri.TryCreate(_browser.CoreWebView2?.Source, UriKind.Absolute, out var pickedUri) ? pickedUri.Host : "";
-            _elementPicking = false; _adminManager?.ReceivePickedSelector(selector, tag ?? "", href ?? "", label ?? "", pickedHost);
+            _elementPicking = false; _adminManager?.ReceivePickedSelector(selector, tag ?? "", href ?? "", label ?? "", pickedHost, elementText ?? "");
         }
         catch (Exception ex) { AppDiagnostics.Write("Read selected page element", ex); }
     }
