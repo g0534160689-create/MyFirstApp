@@ -1,6 +1,5 @@
 using System.Drawing.Printing;
 using System.Text.Json;
-using PdfiumViewer;
 
 namespace RavKavKiosk;
 
@@ -223,208 +222,131 @@ internal sealed class PdfTitlePrompt : Form
 internal sealed class PdfLibraryViewerForm : Form
 {
     private readonly ListBox _books = new() { Dock = DockStyle.Fill, IntegralHeight = false };
-    private readonly PictureBox _pageImage = new() { Dock = DockStyle.Fill, SizeMode = PictureBoxSizeMode.Zoom, BackColor = Color.FromArgb(31, 42, 55) };
-    private readonly Label _pageLabel = new() { AutoSize = true, ForeColor = Color.White, Padding = new Padding(10, 8, 10, 0) };
-    private readonly Button _previous = new() { Text = "הקודם" };
-    private readonly Button _next = new() { Text = "הבא" };
-    private readonly Button _zoomIn = new() { Text = "הגדלה +" };
-    private readonly Button _zoomOut = new() { Text = "הקטנה −" };
-    private readonly ComboBox _printLayout = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 180 };
-    private readonly TextBox _search = new() { Width = 220, PlaceholderText = "חיפוש טקסט בספר..." };
-    private PdfDocument? _document;
+    private readonly WebView2 _browser = new() { Dock = DockStyle.Fill };
+    private readonly Label _status = new() { Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleRight, ForeColor = Color.FromArgb(255, 222, 161) };
+    private readonly Button _refresh = new() { Text = "רענון ספרייה", AutoSize = true };
+    private readonly Button _back = new() { Text = "חזרה לספרייה", AutoSize = true };
+    private bool _browserReady;
     private PdfBook? _selectedBook;
-    private int _pageIndex;
-    private float _zoom = 1f;
 
     public PdfLibraryViewerForm()
     {
-        Text = "ספריית PDF — צפייה והדפסה";
-        Width = 1180; Height = 820; MinimumSize = new Size(900, 620);
+        Text = "ספריית PDF — קורא מסמכים";
+        Width = 1280; Height = 860; MinimumSize = new Size(960, 640);
         StartPosition = FormStartPosition.CenterParent;
         RightToLeft = RightToLeft.Yes; RightToLeftLayout = true;
         BackColor = Color.FromArgb(9, 18, 34); ForeColor = Color.White;
         Font = new Font("Segoe UI", 10);
-        BuildUi(); LoadBooks();
+        BuildUi();
+        LoadBooks();
+        Shown += async (_, _) => await InitializeBrowserAsync();
     }
 
     private void BuildUi()
     {
         var root = new TableLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(12), ColumnCount = 2, RowCount = 1 };
-        root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 250));
+        root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 255));
         root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         Controls.Add(root);
-        var libraryPanel = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2 };
-        libraryPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
-        libraryPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        libraryPanel.Controls.Add(new Label { Text = "ספרים זמינים", Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleRight, ForeColor = Color.FromArgb(255, 222, 161), Font = new Font("Segoe UI", 12, FontStyle.Bold) }, 0, 0);
-        _books.BackColor = Color.FromArgb(17, 30, 48); _books.ForeColor = Color.White; _books.Font = new Font("Segoe UI", 10);
-        _books.SelectedIndexChanged += (_, _) => SelectBook();
-        libraryPanel.Controls.Add(_books, 0, 1);
-        root.Controls.Add(libraryPanel, 0, 0);
 
-        var reader = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 3, ColumnCount = 1 };
-        reader.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
+        var library = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 3, ColumnCount = 1, BackColor = Color.FromArgb(15, 27, 43), Padding = new Padding(8) };
+        library.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
+        library.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        library.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
+        library.Controls.Add(new Label { Text = "ספרים זמינים", Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleRight, ForeColor = Color.FromArgb(255, 222, 161), Font = new Font("Segoe UI", 12, FontStyle.Bold) }, 0, 0);
+        _books.BackColor = Color.FromArgb(17, 30, 48); _books.ForeColor = Color.White; _books.Font = new Font("Segoe UI", 10);
+        _books.SelectedIndexChanged += (_, _) => OpenSelectedBook();
+        library.Controls.Add(_books, 0, 1);
+        _refresh.Dock = DockStyle.Fill; _refresh.FlatStyle = FlatStyle.Flat;
+        _refresh.Click += (_, _) => LoadBooks();
+        library.Controls.Add(_refresh, 0, 2);
+        root.Controls.Add(library, 0, 0);
+
+        var reader = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1 };
+        reader.RowStyles.Add(new RowStyle(SizeType.Absolute, 54));
         reader.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        reader.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
-        var toolbar = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft, WrapContents = true };
-        _previous.Click += (_, _) => ChangePage(-1);
-        _next.Click += (_, _) => ChangePage(1);
-        _zoomIn.Click += (_, _) => { _zoom = Math.Min(2.5f, _zoom + .15f); RenderPage(); };
-        _zoomOut.Click += (_, _) => { _zoom = Math.Max(.5f, _zoom - .15f); RenderPage(); };
-        _printLayout.Items.AddRange(["עמוד אחד בדף", "שני עמודים בדף (ימין ← שמאל)"]);
-        _printLayout.SelectedIndex = 0;
-        var find = new Button { Text = "חפש", AutoSize = true };
-        find.Click += (_, _) => FindText();
-        toolbar.Controls.AddRange([_previous, _next, _zoomIn, _zoomOut, new Label { Text = "פריסת הדפסה:", AutoSize = true, Padding = new Padding(6, 8, 0, 0) }, _printLayout, _search, find]);
-        var print = new Button { Text = "הדפס למדפסת ברירת המחדל", Dock = DockStyle.Left, Width = 230, Height = 34 };
-        print.Click += (_, _) => PrintBook();
-        var footer = new Panel { Dock = DockStyle.Fill };
-        footer.Controls.Add(_pageLabel); footer.Controls.Add(print);
-        reader.Controls.Add(toolbar, 0, 0); reader.Controls.Add(_pageImage, 0, 1); reader.Controls.Add(footer, 0, 2);
+        var toolbar = new Panel { Dock = DockStyle.Fill, BackColor = Color.FromArgb(17, 30, 48), Padding = new Padding(8) };
+        _status.Text = "בחר ספר מהרשימה כדי להתחיל לצפות";
+        _back.Dock = DockStyle.Left; _back.FlatStyle = FlatStyle.Flat;
+        _back.Click += (_, _) => { _selectedBook = null; _browser.CoreWebView2?.NavigateToString(WelcomeHtml()); _status.Text = "בחר ספר מהרשימה"; };
+        toolbar.Controls.Add(_status); toolbar.Controls.Add(_back);
+        _browser.DefaultBackgroundColor = Color.FromArgb(31, 42, 55);
+        reader.Controls.Add(toolbar, 0, 0);
+        reader.Controls.Add(_browser, 0, 1);
         root.Controls.Add(reader, 1, 0);
-        _pageImage.ContextMenuStrip = new ContextMenuStrip();
     }
+
+    private async Task InitializeBrowserAsync()
+    {
+        try
+        {
+            await _browser.EnsureCoreWebView2Async();
+            var core = _browser.CoreWebView2;
+            core.Settings.AreDefaultContextMenusEnabled = false;
+            core.Settings.AreDevToolsEnabled = false;
+            core.Settings.IsStatusBarEnabled = false;
+            core.Settings.IsZoomControlEnabled = true;
+            core.DownloadStarting += (_, e) => { e.Cancel = true; };
+            core.NewWindowRequested += (_, e) => { e.Handled = true; };
+            core.NavigationCompleted += (_, e) =>
+            {
+                if (!e.IsSuccess) _status.Text = "לא ניתן להציג את הקובץ. בדוק שה-PDF תקין ונסה שוב.";
+            };
+            _browserReady = true;
+            core.NavigateToString(WelcomeHtml());
+            _status.Text = "תצוגת PDF בסגנון דפדפן מוכנה";
+            if (_books.SelectedItem is BookItem) OpenSelectedBook();
+        }
+        catch (Exception ex)
+        {
+            AppDiagnostics.Write("PDF WebView2 initialization", ex);
+            _status.Text = "רכיב הצפייה לא הופעל. יש לוודא ש-WebView2 Runtime מותקן.";
+            MessageBox.Show(this, "לא ניתן להפעיל את קורא ה-PDF:\n" + ex.Message, "שגיאה בהפעלת הצופה", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
+    private static string WelcomeHtml() => """
+        <!doctype html><html lang="he" dir="rtl"><meta charset="utf-8">
+        <style>html,body{height:100%;margin:0;background:#202b3a;color:#e9eef5;font:16px Segoe UI,Arial}
+        body{display:grid;place-items:center}.welcome{text-align:center;padding:36px;border:1px solid #456078;border-radius:18px;background:#14253a}
+        h2{color:#ffdea1;margin:0 0 12px}.muted{color:#b8c5d3}</style>
+        <body><div class="welcome"><h2>ספריית הספרים הדיגיטלית</h2><div class="muted">בחר ספר מהרשימה כדי לפתוח אותו בקורא המסמכים.</div></div></body></html>
+        """;
 
     private void LoadBooks()
     {
+        var selectedId = (_books.SelectedItem as BookItem)?.Book.Id;
         _books.Items.Clear();
         foreach (var book in PdfLibraryStore.GetBooks()) _books.Items.Add(new BookItem(book));
-        if (_books.Items.Count > 0) _books.SelectedIndex = 0;
-        else _pageLabel.Text = "עדיין לא הוגדרו ספרים. יש לפנות למנהל המערכת.";
+        if (_books.Items.Count > 0)
+        {
+            var index = 0;
+            if (selectedId is not null)
+                for (var i = 0; i < _books.Items.Count; i++)
+                    if (((BookItem)_books.Items[i]!).Book.Id == selectedId) { index = i; break; }
+            _books.SelectedIndex = index;
+        }
+        else
+        {
+            _selectedBook = null;
+            if (_browserReady) _browser.CoreWebView2.NavigateToString(WelcomeHtml());
+            _status.Text = "עדיין לא הוגדרו ספרים. יש לפנות למנהל המערכת.";
+        }
     }
 
-    private void SelectBook()
+    private void OpenSelectedBook()
     {
         if (_books.SelectedItem is not BookItem item) return;
-        try
+        _selectedBook = item.Book;
+        var path = PdfLibraryStore.GetBookPath(item.Book);
+        if (!File.Exists(path))
         {
-            _document?.Dispose();
-            _selectedBook = item.Book;
-            _document = PdfDocument.Load(PdfLibraryStore.GetBookPath(item.Book));
-            _pageIndex = 0; _zoom = 1f;
-            RenderPage();
+            _status.Text = "קובץ הספר לא נמצא במחשב.";
+            return;
         }
-        catch (Exception ex)
-        {
-            _document?.Dispose(); _document = null;
-            _pageImage.Image = null;
-            MessageBox.Show(this, "לא ניתן לפתוח את הספר: " + ex.Message, "שגיאה בפתיחת PDF", MessageBoxButtons.OK, MessageBoxIcon.Error);
-        }
-    }
-
-    private void ChangePage(int delta)
-    {
-        if (_document is null) return;
-        _pageIndex = Math.Clamp(_pageIndex + delta, 0, _document.PageCount - 1);
-        RenderPage();
-    }
-
-    private void RenderPage()
-    {
-        if (_document is null) return;
-        try
-        {
-            var size = _document.PageSizes[_pageIndex];
-            var ratio = size.Width / Math.Max(1, size.Height);
-            var height = Math.Max(500, (int)(850 * _zoom));
-            var width = Math.Max(300, (int)(height * ratio));
-            var rendered = _document.Render(_pageIndex, width, height, 96, 96, true);
-            var old = _pageImage.Image; _pageImage.Image = rendered; old?.Dispose();
-            _pageLabel.Text = $"{_selectedBook?.Title}  |  עמוד {_pageIndex + 1} מתוך {_document.PageCount}";
-            _previous.Enabled = _pageIndex > 0; _next.Enabled = _pageIndex < _document.PageCount - 1;
-        }
-        catch (Exception ex) { AppDiagnostics.Write("PDF page render", ex); }
-    }
-
-    private void FindText()
-    {
-        if (_document is null || string.IsNullOrWhiteSpace(_search.Text)) return;
-        var term = _search.Text.Trim();
-        for (var page = _pageIndex + 1; page < _document.PageCount; page++)
-        {
-            if (_document.GetPdfText(page).Contains(term, StringComparison.CurrentCultureIgnoreCase))
-            {
-                _pageIndex = page; RenderPage(); return;
-            }
-        }
-        for (var page = 0; page <= _pageIndex; page++)
-        {
-            if (_document.GetPdfText(page).Contains(term, StringComparison.CurrentCultureIgnoreCase))
-            {
-                _pageIndex = page; RenderPage(); return;
-            }
-        }
-        MessageBox.Show(this, "הטקסט לא נמצא בספר. בספרים סרוקים ללא שכבת טקסט החיפוש אינו זמין.", "חיפוש בספר", MessageBoxButtons.OK, MessageBoxIcon.Information);
-    }
-
-    private void PrintBook()
-    {
-        if (_document is null || _selectedBook is null) return;
-        try
-        {
-            using var printDocument = new PrintDocument();
-            var settings = new PrinterSettings();
-            if (!settings.IsValid || string.IsNullOrWhiteSpace(settings.PrinterName))
-            {
-                MessageBox.Show(this, "לא הוגדרה מדפסת ברירת מחדל ב-Windows.", "אין מדפסת", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return;
-            }
-            printDocument.PrinterSettings = settings;
-            var twoUp = _printLayout.SelectedIndex == 1;
-            printDocument.DefaultPageSettings.Landscape = twoUp;
-            var nextPdfPage = 0;
-            printDocument.BeginPrint += (_, _) => nextPdfPage = 0;
-            printDocument.PrintPage += (_, e) =>
-            {
-                var bounds = e.MarginBounds;
-                if (!twoUp)
-                {
-                    DrawPdfPage(e.Graphics, nextPdfPage++, bounds);
-                }
-                else
-                {
-                    var half = bounds.Width / 2;
-                    var rightCell = new Rectangle(bounds.Left + half, bounds.Top, bounds.Width - half, bounds.Height);
-                    var leftCell = new Rectangle(bounds.Left, bounds.Top, half, bounds.Height);
-                    DrawPdfPage(e.Graphics, nextPdfPage++, rightCell);
-                    if (nextPdfPage < _document.PageCount) DrawPdfPage(e.Graphics, nextPdfPage++, leftCell);
-                }
-                e.HasMorePages = nextPdfPage < _document.PageCount;
-            };
-            printDocument.Print();
-        }
-        catch (Exception ex)
-        {
-            AppDiagnostics.Write("PDF printing", ex);
-            MessageBox.Show(this, "ההדפסה נכשלה: " + ex.Message, "שגיאת הדפסה", MessageBoxButtons.OK, MessageBoxIcon.Error);
-        }
-    }
-
-    private void DrawPdfPage(Graphics graphics, int page, Rectangle target)
-    {
-        if (_document is null || page >= _document.PageCount) return;
-        var size = _document.PageSizes[page];
-        var ratio = size.Width / Math.Max(1, size.Height);
-        var width = Math.Max(400, (int)(target.Width * 2.5));
-        var height = Math.Max(400, (int)(width / Math.Max(.1f, ratio)));
-        if (height > target.Height * 2.5) { height = (int)(target.Height * 2.5); width = (int)(height * ratio); }
-        using var image = _document.Render(page, width, height, 300, 300, true);
-        var fitted = FitRectangle(target, image.Width, image.Height);
-        graphics.DrawImage(image, fitted);
-    }
-
-    private static Rectangle FitRectangle(Rectangle bounds, int imageWidth, int imageHeight)
-    {
-        var scale = Math.Min((float)bounds.Width / imageWidth, (float)bounds.Height / imageHeight);
-        var width = (int)(imageWidth * scale); var height = (int)(imageHeight * scale);
-        return new Rectangle(bounds.Left + (bounds.Width - width) / 2, bounds.Top + (bounds.Height - height) / 2, width, height);
-    }
-
-    protected override void OnFormClosed(FormClosedEventArgs e)
-    {
-        _document?.Dispose();
-        var image = _pageImage.Image; _pageImage.Image = null; image?.Dispose();
-        base.OnFormClosed(e);
+        _status.Text = "פותח: " + item.Book.Title;
+        if (_browserReady)
+            _browser.CoreWebView2.Navigate(new Uri(path).AbsoluteUri);
     }
 
     private sealed class BookItem(PdfBook book)
