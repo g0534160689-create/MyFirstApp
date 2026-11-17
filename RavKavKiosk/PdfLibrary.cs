@@ -194,45 +194,6 @@ internal sealed class PdfLibraryManagerForm : Form
     }
 
 
-    private bool IsAllowedViewerNavigation(string address)
-    {
-        if (string.Equals(address, "about:blank", StringComparison.OrdinalIgnoreCase))
-            return true;
-        if (_selectedBook is null || !Uri.TryCreate(address, UriKind.Absolute, out var target) || !target.IsFile)
-            return false;
-        try
-        {
-            var expected = Path.GetFullPath(PdfLibraryStore.GetBookPath(_selectedBook));
-            var actual = Path.GetFullPath(target.LocalPath);
-            return string.Equals(expected, actual, StringComparison.OrdinalIgnoreCase);
-        }
-        catch { return false; }
-    }
-
-    private async Task PrintToDefaultPrinterAsync()
-    {
-        if (!_browserReady || _selectedBook is null || !File.Exists(PdfLibraryStore.GetBookPath(_selectedBook)))
-            return;
-        try
-        {
-            _print.Enabled = false;
-            _status.Text = "שולח להדפסה למדפסת ברירת המחדל...";
-            var result = await _browser.CoreWebView2.PrintAsync((CoreWebView2PrintSettings?)null);
-            _status.Text = result switch
-            {
-                CoreWebView2PrintStatus.Succeeded => "המסמך נשלח למדפסת ברירת המחדל.",
-                CoreWebView2PrintStatus.PrinterUnavailable => "מדפסת ברירת המחדל אינה זמינה.",
-                _ => "ההדפסה נכשלה."
-            };
-        }
-        catch (Exception ex)
-        {
-            AppDiagnostics.Write("PDF default printer failed", ex);
-            _status.Text = "ההדפסה נכשלה. בדוק את מדפסת ברירת המחדל.";
-        }
-        finally { _print.Enabled = _selectedBook is not null; }
-    }
-
     private sealed class BookItem(PdfBook book)
     {
         public PdfBook Book { get; } = book;
@@ -406,6 +367,46 @@ internal sealed class PdfLibraryViewerForm : Form
         if (_browserReady)
             _browser.CoreWebView2.Navigate(new Uri(path).AbsoluteUri);
     }
+
+    private bool IsAllowedViewerNavigation(string address)
+    {
+        if (string.Equals(address, "about:blank", StringComparison.OrdinalIgnoreCase))
+            return true;
+        if (_selectedBook is null || !Uri.TryCreate(address, UriKind.Absolute, out var target) || !target.IsFile)
+            return false;
+        try
+        {
+            var expected = Path.GetFullPath(PdfLibraryStore.GetBookPath(_selectedBook));
+            var actual = Path.GetFullPath(target.LocalPath);
+            return string.Equals(expected, actual, StringComparison.OrdinalIgnoreCase);
+        }
+        catch { return false; }
+    }
+
+    private async Task PrintToDefaultPrinterAsync()
+    {
+        if (!_browserReady || _selectedBook is null || !File.Exists(PdfLibraryStore.GetBookPath(_selectedBook)))
+            return;
+        try
+        {
+            _print.Enabled = false;
+            _status.Text = "שולח להדפסה למדפסת ברירת המחדל...";
+            var result = await _browser.CoreWebView2.PrintAsync((CoreWebView2PrintSettings?)null);
+            _status.Text = result switch
+            {
+                CoreWebView2PrintStatus.Succeeded => "המסמך נשלח למדפסת ברירת המחדל.",
+                CoreWebView2PrintStatus.PrinterUnavailable => "מדפסת ברירת המחדל אינה זמינה.",
+                _ => "ההדפסה נכשלה."
+            };
+        }
+        catch (Exception ex)
+        {
+            AppDiagnostics.Write("PDF default printer failed", ex);
+            _status.Text = "ההדפסה נכשלה. בדוק את מדפסת ברירת המחדל.";
+        }
+        finally { _print.Enabled = _selectedBook is not null; }
+    }
+
 
     private sealed class BookItem(PdfBook book)
     {
