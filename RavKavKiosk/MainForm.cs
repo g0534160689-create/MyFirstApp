@@ -326,6 +326,16 @@ internal sealed class MainForm : Form
             ForeColor = Color.FromArgb(128, 210, 185), Font = new Font("Segoe UI", 9, FontStyle.Bold),
             TextAlign = ContentAlignment.MiddleLeft, BackColor = Color.Transparent
         });
+        var pdfLibraryButton = new Button
+        {
+            Text = "▤  ספריית PDF", Dock = DockStyle.Left, Width = 156, Height = 34,
+            FlatStyle = FlatStyle.Flat, BackColor = Color.FromArgb(34, 57, 79),
+            ForeColor = Color.FromArgb(255, 222, 161), Font = new Font("Segoe UI", 9, FontStyle.Bold),
+            Cursor = Cursors.Hand, UseVisualStyleBackColor = false
+        };
+        pdfLibraryButton.FlatAppearance.BorderColor = Color.FromArgb(90, 119, 148);
+        pdfLibraryButton.Click += (_, _) => OpenPdfLibrary();
+        sectionHeader.Controls.Add(pdfLibraryButton);
 
         layout.Controls.Add(meta, 0, 0);
         layout.Controls.Add(hero, 0, 1);
@@ -1201,6 +1211,7 @@ internal sealed class MainForm : Form
         _adminManager.HopOnPanelVisibilityChanged += SetHopOnPanelVisibility;
         _adminManager.ThemeChanged += ApplyTheme;
         _adminManager.ReaderDiagnosticsRequested += () => { using var diagnostics = new ReaderDiagnosticsForm(); diagnostics.ShowDialog(this); };
+        _adminManager.PdfLibraryRequested += () => { using var manager = new PdfLibraryManagerForm(); manager.ShowDialog(this); };
         ApplyTheme(AdminPolicyStore.Load().ThemeId);
         _adminManager.FormClosed += (_, _) => { _adminManager = null; SetAdminMode(false); };
         _adminManager.Show(this);
@@ -1834,6 +1845,12 @@ internal sealed class MainForm : Form
     {
         _previous.Visible = _browser.Visible;
         _previous.Enabled = _browser.Visible && _browser.CoreWebView2?.CanGoBack == true;
+    }
+
+    private void OpenPdfLibrary()
+    {
+        using var viewer = new PdfLibraryViewerForm();
+        viewer.ShowDialog(this);
     }
 
     private void ShowHome()
