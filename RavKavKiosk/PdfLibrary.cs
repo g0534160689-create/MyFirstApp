@@ -1,4 +1,5 @@
 using Microsoft.Web.WebView2.WinForms;
+using Microsoft.Web.WebView2.Core;
 using System.Drawing.Printing;
 using System.Text.Json;
 
@@ -192,6 +193,46 @@ internal sealed class PdfLibraryManagerForm : Form
         catch (Exception ex) { MessageBox.Show(this, ex.Message, "שגיאה", MessageBoxButtons.OK, MessageBoxIcon.Error); }
     }
 
+
+    private bool IsAllowedViewerNavigation(string address)
+    {
+        if (string.Equals(address, "about:blank", StringComparison.OrdinalIgnoreCase))
+            return true;
+        if (_selectedBook is null || !Uri.TryCreate(address, UriKind.Absolute, out var target) || !target.IsFile)
+            return false;
+        try
+        {
+            var expected = Path.GetFullPath(PdfLibraryStore.GetBookPath(_selectedBook));
+            var actual = Path.GetFullPath(target.LocalPath);
+            return string.Equals(expected, actual, StringComparison.OrdinalIgnoreCase);
+        }
+        catch { return false; }
+    }
+
+    private async Task PrintToDefaultPrinterAsync()
+    {
+        if (!_browserReady || _selectedBook is null || !File.Exists(PdfLibraryStore.GetBookPath(_selectedBook)))
+            return;
+        try
+        {
+            _print.Enabled = false;
+            _status.Text = "שולח להדפסה למדפסת ברירת המחדל...";
+            var result = await _browser.CoreWebView2.PrintAsync((CoreWebView2PrintSettings?)null);
+            _status.Text = result switch
+            {
+                CoreWebView2PrintStatus.Succeeded => "המסמך נשלח למדפסת ברירת המחדל.",
+                CoreWebView2PrintStatus.PrinterUnavailable => "מדפסת ברירת המחדל אינה זמינה.",
+                _ => "ההדפסה נכשלה."
+            };
+        }
+        catch (Exception ex)
+        {
+            AppDiagnostics.Write("PDF default printer failed", ex);
+            _status.Text = "ההדפסה נכשלה. בדוק את מדפסת ברירת המחדל.";
+        }
+        finally { _print.Enabled = _selectedBook is not null; }
+    }
+
     private sealed class BookItem(PdfBook book)
     {
         public PdfBook Book { get; } = book;
@@ -227,6 +268,7 @@ internal sealed class PdfLibraryViewerForm : Form
     private readonly Label _status = new() { Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleRight, ForeColor = Color.FromArgb(255, 222, 161) };
     private readonly Button _refresh = new() { Text = "רענון ספרייה", AutoSize = true };
     private readonly Button _back = new() { Text = "חזרה לספרייה", AutoSize = true };
+    private readonly Button _print = new() { Text = "הדפס למדפסת ברירת מחדל", AutoSize = true };
     private bool _browserReady;
     private PdfBook? _selectedBook;
 
@@ -269,8 +311,10 @@ internal sealed class PdfLibraryViewerForm : Form
         var toolbar = new Panel { Dock = DockStyle.Fill, BackColor = Color.FromArgb(17, 30, 48), Padding = new Padding(8) };
         _status.Text = "בחר ספר מהרשימה כדי להתחיל לצפות";
         _back.Dock = DockStyle.Left; _back.FlatStyle = FlatStyle.Flat;
-        _back.Click += (_, _) => { _selectedBook = null; _browser.CoreWebView2?.NavigateToString(WelcomeHtml()); _status.Text = "בחר ספר מהרשימה"; };
-        toolbar.Controls.Add(_status); toolbar.Controls.Add(_back);
+        _print.Dock = DockStyle.Right; _print.FlatStyle = FlatStyle.Flat; _print.Enabled = false;
+        _print.Click += async (_, _) => await PrintToDefaultPrinterAsync();
+        _back.Click += (_, _) => { _selectedBook = null; _browser.CoreWebView2?.NavigateToString(WelcomeHtml()); _status.Text = "בחר ספר מהרשימה"; _print.Enabled = false; };
+        toolbar.Controls.Add(_status); toolbar.Controls.Add(_back); toolbar.Controls.Add(_print);
         _browser.DefaultBackgroundColor = Color.FromArgb(31, 42, 55);
         reader.Controls.Add(toolbar, 0, 0);
         reader.Controls.Add(_browser, 0, 1);
@@ -287,11 +331,23 @@ internal sealed class PdfLibraryViewerForm : Form
             core.Settings.AreDevToolsEnabled = false;
             core.Settings.IsStatusBarEnabled = false;
             core.Settings.IsZoomControlEnabled = true;
+            core.Settings.AreBrowserAcceleratorKeysEnabled = false;
+            core.Settings.AreDefaultScriptDialogsEnabled = false;
             core.DownloadStarting += (_, e) => { e.Cancel = true; };
             core.NewWindowRequested += (_, e) => { e.Handled = true; };
+            core.LaunchingExternalUriScheme += (_, e) => { e.Cancel = true; };
+            core.NavigationStarting += (_, e) =>
+            {
+                if (!IsAllowedViewerNavigation(e.Uri))
+                {
+                    e.Cancel = true;
+                    AppDiagnostics.Write("PDF viewer blocked navigation", details: e.Uri);
+                }
+            };
             core.NavigationCompleted += (_, e) =>
             {
-                if (!e.IsSuccess) _status.Text = "לא ניתן להציג את הקובץ. בדוק שה-PDF תקין ונסה שוב.";
+                if (!e.IsSuccess) { _status.Text = "לא ניתן להציג את הקובץ. בדוק שה-PDF תקין ונסה שוב."; _print.Enabled = false; }
+                else _print.Enabled = _selectedBook is not null;
             };
             _browserReady = true;
             core.NavigateToString(WelcomeHtml());
@@ -329,7 +385,7 @@ internal sealed class PdfLibraryViewerForm : Form
         }
         else
         {
-            _selectedBook = null;
+            _selectedBook = null; _print.Enabled = false;
             if (_browserReady) _browser.CoreWebView2.NavigateToString(WelcomeHtml());
             _status.Text = "עדיין לא הוגדרו ספרים. יש לפנות למנהל המערכת.";
         }
@@ -346,6 +402,7 @@ internal sealed class PdfLibraryViewerForm : Form
             return;
         }
         _status.Text = "פותח: " + item.Book.Title;
+        _print.Enabled = false;
         if (_browserReady)
             _browser.CoreWebView2.Navigate(new Uri(path).AbsoluteUri);
     }
