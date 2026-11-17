@@ -401,6 +401,7 @@ internal sealed class AdminManagerForm : Form
     public event Action<bool>? HopOnPanelVisibilityChanged;
     public event Action<string>? ThemeChanged;
     public event Action? ReaderDiagnosticsRequested;
+    public event Action? PdfLibraryRequested;
     private bool adminMode;
     private Button? adminModeButton;
     public AdminManagerForm(string url)
@@ -437,6 +438,9 @@ internal sealed class AdminManagerForm : Form
             AdminModeChanged?.Invoke(adminMode);
         };
         adminStrip.Controls.Add(adminModeButton);
+        var pdfManagerButton = new Button { Text = "ניהול ספרי PDF", Width = 140, Height = 32 };
+        pdfManagerButton.Click += (_, _) => PdfLibraryRequested?.Invoke();
+        adminStrip.Controls.Add(pdfManagerButton);
         var ravKavVisible = new CheckBox
         {
             Text = "הצג חלונית רב-קו במסך הראשי",
