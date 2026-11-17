@@ -372,6 +372,9 @@ internal sealed class PdfLibraryViewerForm : Form
     {
         if (string.Equals(address, "about:blank", StringComparison.OrdinalIgnoreCase))
             return true;
+        if (Uri.TryCreate(address, UriKind.Absolute, out var internalUri) &&
+            internalUri.Scheme.Equals("chrome-extension", StringComparison.OrdinalIgnoreCase))
+            return internalUri.Host.Equals("mhjfbmdgcfjbbpaeojofohoefgiehjai", StringComparison.OrdinalIgnoreCase);
         if (_selectedBook is null || !Uri.TryCreate(address, UriKind.Absolute, out var target) || !target.IsFile)
             return false;
         try
